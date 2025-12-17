@@ -41,10 +41,12 @@ No formal feedback collection - this is greenfield.
 - App identifier (which app sent the feedback)
 
 ## Outputs
-[To be discovered - where does feedback go?]
+- **Destination**: Airtable (existing base with auth already configured)
+- **Fields**: TBD based on form questions
+- **Record per submission**: timestamp, user, app, responses
 
 ## Constraints
-[To be discovered]
+- Must use existing Airtable base/auth (env var for API key + base ID)
 
 ## Workflow Steps
 [To be discovered]
@@ -54,7 +56,6 @@ No formal feedback collection - this is greenfield.
 |------------|--------|--------|--------|
 
 ## Open Questions
-- Where should feedback be stored/sent?
 - What are the specific dropdown questions?
 - How is user identity passed to the widget?
 - npm package vs copy-paste code?
