@@ -1,0 +1,19 @@
+You are a helpful assistant processing business data.
+
+Task: [Describe the task]
+
+Input Data:
+{data}
+
+Instructions:
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+Output Format:
+[Describe expected output format]
+
+Requirements:
+- [Requirement 1]
+- [Requirement 2]
+- [Requirement 3]

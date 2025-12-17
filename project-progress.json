@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "lastUpdated": "2025-12-17T21:08:10.687457Z",
+  "project": "agent-dev-harness",
+  "currentWork": {
+    "type": "general",
+    "plan": null,
+    "planTask": null,
+    "debugIssue": null,
+    "debugPhase": null
+  },
+  "lastSession": {
+    "date": "2025-12-17",
+    "duration_minutes": 0,
+    "summary": "Completed progress tracking plan (Tasks 5-11): event detection hook, time-tracker integration, settings configuration, enhanced commands, and template updates",
+    "events": [
+      {
+        "type": "plan_task_completed",
+        "task": 5
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 6
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 7
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 8
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 9
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 10
+      },
+      {
+        "type": "plan_task_completed",
+        "task": 11
+      }
+    ],
+    "commits": [
+      {
+        "hash": "bb537fb",
+        "message": "Add track-progress-events.py hook for event detection (Task 5)"
+      },
+      {
+        "hash": "38d507b",
+        "message": "Integrate time-tracker with progress tracking (Task 6)"
+      },
+      {
+        "hash": "32d95c6",
+        "message": "Add track-progress-events.py to UserPromptSubmit hooks (Task 7)"
+      },
+      {
+        "hash": "50c3080",
+        "message": "Enhance /checkpoint to log progress events (Task 8)"
+      },
+      {
+        "hash": "cf028f0",
+        "message": "Enhance /start to show currentWork context (Task 9)"
+      },
+      {
+        "hash": "372de8d",
+        "message": "Add project-progress.json to business_process template (Task 11)"
+      }
+    ],
+    "nextSteps": [
+      "Test progress tracking system end-to-end",
+      "Consider adding more event detection patterns",
+      "Continue with skill enforcement test plan series"
+    ]
+  },
+  "recentSessions": [
+    {
+      "date": "2025-12-11",
+      "summary": "Completed session_continuity test plan, designed progress tracking architecture, implemented core progress_tracker library with TDD (Tasks 1-4)"
+    },
+    {
+      "date": "2025-12-10",
+      "summary": "Created claude-project-template repo, designed session continuity test plans"
+    }
+  ],
+  "knownIssues": [
+    {
+      "id": "time-tracking-short",
+      "description": "Time tracking sometimes shows short durations",
+      "status": "fixed",
+      "resolution": "Moved hook from UserPromptSubmit to SessionStart"
+    }
+  ]
+}

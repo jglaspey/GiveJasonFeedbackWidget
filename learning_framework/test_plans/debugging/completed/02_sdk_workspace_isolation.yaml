@@ -1,0 +1,113 @@
+# ABOUTME: Test plan for isolating Agent SDK workspace from parent git repo
+# ABOUTME: Critical for testing hooks/skills in tester_workspace without parent config interference
+
+feature:
+  name: sdk_workspace_isolation
+  description: How to make Agent SDK treat a subdirectory as its project root?
+  category: debugging
+
+problem_statement: |
+  When running Agent SDK with cwd=tester_workspace, Claude still loads configs
+  from the parent git repo's .claude/ directory. This prevents testing hooks
+  and skills in isolation.
+
+  Current behavior:
+  - setting_sources=['project'] walks up to parent git repo
+  - setting_sources=['local'] stays in cwd but may not load workspace hooks
+  - add_dirs adds skills but doesn't seem to load hooks
+  - Nested git init doesn't isolate (SDK still finds parent)
+
+hypotheses:
+  - id: h1
+    statement: "SDK hooks parameter can define hooks programmatically"
+    evidence_needed:
+      - ClaudeAgentOptions.hooks accepts hook definitions
+      - Hooks fire correctly when defined this way
+      - Can point to scripts in tester_workspace
+    research:
+      - Check Agent SDK documentation for hooks parameter
+      - Test if hooks can reference workspace scripts
+
+  - id: h2
+    statement: "Moving tester_workspace outside parent repo isolates it"
+    evidence_needed:
+      - Workspace at /tmp/tester_workspace works
+      - SDK loads only workspace configs
+      - Hooks fire correctly
+    trade_offs:
+      - Less convenient for development
+      - Need to copy/sync files
+
+  - id: h3
+    statement: "There's an SDK option to specify project root explicitly"
+    evidence_needed:
+      - Find option like 'project_root' or 'settings_path'
+      - Test if it overrides git-based discovery
+    research:
+      - Search Agent SDK docs and source
+      - Check claude-code CLI flags
+
+  - id: h4
+    statement: "Combination of options achieves isolation"
+    evidence_needed:
+      - Find working combination of cwd, add_dirs, setting_sources, etc.
+      - Both skills AND hooks load from workspace
+      - Parent repo configs ignored
+
+research_tasks:
+  - task: "Search Agent SDK documentation for workspace/project configuration"
+    queries:
+      - "claude agent sdk project root configuration"
+      - "claude agent sdk hooks parameter"
+      - "claude code sdk workspace isolation"
+
+  - task: "Check ClaudeAgentOptions for undocumented parameters"
+    method: "Inspect SDK source or use help(ClaudeAgentOptions)"
+
+  - task: "Test hooks parameter programmatically"
+    method: "Define hooks in ClaudeAgentOptions instead of settings.json"
+
+experiments:
+  - id: programmatic_hooks
+    hypothesis_id: h1
+    description: Define hooks in SDK options instead of settings.json
+    setup:
+      code: |
+        options = ClaudeAgentOptions(
+            cwd=str(workspace),
+            hooks={
+                'PreToolUse': [
+                    HookMatcher(
+                        matcher='Edit|Write',
+                        hooks=[{
+                            'type': 'command',
+                            'command': f'{workspace}/.claude/hooks/enforce-file-skills.py'
+                        }]
+                    )
+                ]
+            }
+        )
+    observe:
+      - Does the hook fire?
+      - Is output visible to Claude?
+
+  - id: external_workspace
+    hypothesis_id: h2
+    description: Test with workspace outside any git repo
+    setup:
+      - Copy tester_workspace to /tmp/isolated_workspace
+      - Run SDK with cwd=/tmp/isolated_workspace
+    observe:
+      - Which CLAUDE.md loads?
+      - Do hooks fire?
+
+success_criteria:
+  - "Can run SDK against tester_workspace"
+  - "Workspace hooks fire (not parent hooks)"
+  - "Workspace skills available (not parent skills)"
+  - "Parent CLAUDE.md NOT loaded"
+
+notes: |
+  This is a prerequisite for reliable experiment testing.
+  Without workspace isolation, we can't validate hook behavior
+  independently from the main harness configuration.

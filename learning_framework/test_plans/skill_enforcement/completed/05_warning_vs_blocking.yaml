@@ -1,0 +1,225 @@
+# ABOUTME: Test plan comparing soft warnings vs hard blocking for enforcement
+# ABOUTME: Validates which enforcement level is effective without being annoying
+
+feature:
+  name: warning_vs_blocking
+  description: Should enforcement be warnings (soft) or blocking (hard)?
+  category: skill_enforcement
+
+core_question: |
+  Hooks can either:
+  1. WARN (exit 0): Show message, allow action to proceed
+  2. BLOCK (exit 2): Show message, prevent action until addressed
+
+  Which is more effective? Which causes enforcement fatigue?
+
+# Exit codes in Claude Code hooks
+hook_behavior:
+  exit_0: "Success - action proceeds, any stdout shown to Claude"
+  exit_1: "Error - action proceeds, stderr shown as error"
+  exit_2: "Block - action STOPPED, stderr shown, Claude must address"
+
+hypotheses:
+  - id: h1
+    statement: "Warnings are ignored over time (enforcement fatigue)"
+    evidence_needed:
+      - Track warning frequency vs compliance rate over time
+      - Does compliance drop after initial period?
+
+  - id: h2
+    statement: "Blocking causes frustration and workarounds"
+    evidence_needed:
+      - Track blocking frequency vs user override requests
+      - Does blocking cause me to disable hooks?
+
+  - id: h3
+    statement: "Context-dependent enforcement is optimal"
+    approach: |
+      - High-confidence violations → BLOCK
+      - Medium-confidence → WARN
+      - Low-confidence → Log only
+    evidence_needed:
+      - Compare satisfaction and compliance across tiers
+
+  - id: h4
+    statement: "Blocking with escape hatch is optimal"
+    approach: |
+      Block by default, but allow proceed if Claude provides reason
+      "I acknowledge this violation because: [reason]"
+    evidence_needed:
+      - Escape hatch used appropriately?
+      - Does it become rubber-stamp?
+
+experiments:
+  - id: warning_only_week
+    hypothesis_id: h1
+    description: One week with warnings only
+    setup:
+      all_hooks: "exit 0 (warn only)"
+    track:
+      - "Warnings shown per day"
+      - "Times I followed the warning"
+      - "Times I ignored the warning"
+      - "Reasons for ignoring"
+    duration: "1 week"
+
+  - id: blocking_only_week
+    hypothesis_id: h2
+    description: One week with blocking only
+    setup:
+      all_hooks: "exit 2 (block)"
+    track:
+      - "Blocks per day"
+      - "Times I addressed the issue"
+      - "Times I asked to disable/bypass"
+      - "Frustration level (subjective 1-5)"
+    duration: "1 week"
+
+  - id: tiered_enforcement
+    hypothesis_id: h3
+    description: Tiered enforcement based on confidence
+    setup:
+      tiers:
+        block:
+          - "Production code edited without ANY test file in session"
+          - "Dangerous git commands"
+          - "Editing skill files without following writing-skills"
+        warn:
+          - "Production edited before CORRESPONDING test"
+          - "sleep() in test file"
+          - "mock-only assertion"
+        log_only:
+          - "Possible TDD violation (ambiguous file types)"
+          - "Maybe-debugging prompts"
+    track:
+      - "Blocks per day (should be rare)"
+      - "Warnings per day"
+      - "Compliance rate per tier"
+      - "Satisfaction (1-5)"
+    duration: "2 weeks"
+
+  - id: blocking_with_escape
+    hypothesis_id: h4
+    description: Block with explicit acknowledgment to proceed
+    setup:
+      hook_behavior: |
+        Exit 2 (block) but check for acknowledgment pattern:
+
+        If Claude says "I acknowledge: [reason]" → allow proceed
+        Otherwise → keep blocking
+      implementation: |
+        #!/usr/bin/env python3
+        import json
+        import sys
+        from pathlib import Path
+
+        data = json.load(sys.stdin)
+        session_id = data.get('session_id', 'unknown')
+
+        # Check if there's a recent acknowledgment
+        ack_file = Path(f'/tmp/claude_ack_{session_id}.json')
+        if ack_file.exists():
+            ack = json.loads(ack_file.read_text())
+            if ack.get('acknowledged'):
+                # Clear the ack and proceed
+                ack_file.unlink()
+                sys.exit(0)
+
+        # No acknowledgment, block
+        print("🚫 BLOCKED: TDD violation detected", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("To proceed, say:", file=sys.stderr)
+        print('  "I acknowledge this TDD skip because: [your reason]"', file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Then retry the edit.", file=sys.stderr)
+        sys.exit(2)
+    track:
+      - "Blocks per day"
+      - "Acknowledgments per day"
+      - "Quality of reasons given"
+      - "Does it become rubber-stamp?"
+    duration: "1 week"
+
+  - id: enforcement_fatigue_measurement
+    hypothesis_id: h1
+    description: Measure compliance decay over time
+    setup:
+      warning_enforcement: "All warnings, no blocking"
+    track_weekly:
+      - week_1: "Compliance rate"
+      - week_2: "Compliance rate"
+      - week_3: "Compliance rate"
+      - week_4: "Compliance rate"
+    observe:
+      - "Does compliance decrease over time?"
+      - "What's the steady-state compliance rate?"
+      - "What triggers re-engagement with warnings?"
+    duration: "4 weeks"
+
+analysis_criteria:
+  effectiveness:
+    - "Skill compliance rate"
+    - "Code quality improvement (subjective)"
+    - "Bugs caught by enforcement"
+
+  usability:
+    - "Frustration level"
+    - "Hook disable requests"
+    - "Workaround attempts"
+
+  sustainability:
+    - "Compliance rate over time"
+    - "False positive handling"
+    - "Maintenance burden"
+
+testing_process:
+  1_baseline: |
+    One week with NO enforcement hooks (except existing git-operations)
+    Track: TDD violations, anti-pattern occurrences, debugging without process
+
+  2_warning_phase: |
+    One week with all warnings (exit 0)
+    Track: Warnings shown, compliance, fatigue
+
+  3_blocking_phase: |
+    One week with all blocking (exit 2)
+    Track: Blocks, frustration, workarounds
+
+  4_tiered_phase: |
+    Two weeks with tiered enforcement
+    Track: Per-tier metrics
+
+  5_analysis: |
+    Compare all phases:
+    - Which had best compliance?
+    - Which was most sustainable?
+    - What's the recommended configuration?
+
+success_metrics:
+  - "Clear recommendation: warn vs block vs tiered"
+  - "Documented fatigue patterns"
+  - "Escape hatch effectiveness measured"
+  - "Sustainable enforcement configuration identified"
+
+notes: |
+  This is as much about psychology as technology.
+
+  Key insight from existing git-operations hook:
+  - It BLOCKS dangerous git commands
+  - I don't feel frustrated by it
+  - Why? Because it's high-confidence and infrequent
+
+  Hypothesis: Blocking works when:
+  1. High confidence (not false positives)
+  2. Infrequent (not every edit)
+  3. Clear path to resolution
+
+  Blocking fails when:
+  1. Too many false positives
+  2. Too frequent
+  3. No clear resolution path
+
+  The escape hatch approach might be the sweet spot:
+  - Forces acknowledgment (not rubber-stamp ignore)
+  - Allows proceed with reason (not frustrating)
+  - Creates audit trail (can review reasons)

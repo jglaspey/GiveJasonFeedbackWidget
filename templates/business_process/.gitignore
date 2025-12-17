@@ -1,0 +1,40 @@
+# Outputs (run-specific, gitignored)
+outputs/
+logs/
+*.log
+
+# Secrets and environment
+.env
+.env.*
+secrets.json
+credentials.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Keep directory structure
+!outputs/.gitkeep

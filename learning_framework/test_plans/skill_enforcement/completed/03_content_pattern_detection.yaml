@@ -1,0 +1,289 @@
+# ABOUTME: Test plan for PreToolUse hooks that analyze file content
+# ABOUTME: Validates whether content patterns can trigger skill enforcement
+
+feature:
+  name: content_pattern_detection
+  description: Can hooks analyze file content to detect anti-patterns?
+  category: skill_enforcement
+
+core_hypothesis: |
+  A PreToolUse hook can analyze the content being written/edited and detect
+  anti-patterns that indicate a skill should be followed.
+
+# This is more invasive than path-based detection
+# We're reading the actual content being written
+
+content_patterns_to_detect:
+  - pattern: "sleep() or setTimeout() in test files"
+    skill: condition-based-waiting
+    anti_pattern: "Arbitrary delays instead of condition-based waiting"
+    detection: |
+      Look for: sleep(, time.sleep(, setTimeout(, await new Promise
+      In context of: test files (detected by path)
+
+  - pattern: "mock.toHaveBeenCalled() as the main assertion"
+    skill: testing-anti-patterns
+    anti_pattern: "Testing that mock was called, not real behavior"
+    detection: |
+      Look for: expect(mock).toHaveBeenCalled, expect(spy).toHaveBeenCalled
+      Without: meaningful return value assertions
+
+  - pattern: "_forTesting() methods in production code"
+    skill: testing-anti-patterns
+    anti_pattern: "Test-only methods in production code"
+    detection: |
+      Look for: _forTesting, _testOnly, resetForTest, @VisibleForTesting
+      In context of: non-test files
+
+  - pattern: "Anthropic API instead of Agent SDK"
+    skill: agent-sdk-basics
+    anti_pattern: "Using API credits instead of subscription"
+    detection: |
+      Look for: anthropic.Anthropic(), from anthropic import
+      In context of: local scripts (not deployed services)
+
+hypotheses:
+  - id: h1
+    statement: "sleep/setTimeout in tests can be reliably detected"
+    evidence_needed:
+      - Pattern matches actual test files with delays
+      - False positives rare (legitimate delays like testing debounce)
+      - Reminder shown with alternative pattern
+
+  - id: h2
+    statement: "Mock-testing anti-pattern can be detected"
+    evidence_needed:
+      - Pattern matches tests that only verify mock calls
+      - False positives rare (legitimate mock verification)
+
+  - id: h3
+    statement: "Content analysis doesn't unacceptably slow editing"
+    evidence_needed:
+      - Latency remains < 200ms with content analysis
+      - Analysis is targeted (only on relevant file types)
+
+  - id: h4
+    statement: "Content analysis is more accurate than path-only"
+    evidence_needed:
+      - Compare detection rates: path-only vs path+content
+      - Measure precision improvement
+
+experiments:
+  - id: sleep_detection
+    hypothesis_id: h1
+    description: Detect arbitrary delays in test files
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import re
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+          new_content = data.get('tool_input', {}).get('new_string', '')
+          # For Write tool, content is different field
+          if not new_content:
+              new_content = data.get('tool_input', {}).get('content', '')
+
+          # Only check test files
+          if not re.search(r'test.*\.py$|_test\.py$|\.test\.(ts|js)', file_path):
+              sys.exit(0)
+
+          # Detect sleep patterns
+          sleep_patterns = [
+              r'time\.sleep\s*\(',
+              r'await\s+asyncio\.sleep\s*\(',
+              r'setTimeout\s*\(',
+              r'await\s+new\s+Promise.*setTimeout',
+          ]
+
+          for pattern in sleep_patterns:
+              if re.search(pattern, new_content):
+                  print("⏰ ARBITRARY DELAY DETECTED IN TEST")
+                  print("   Use condition-based-waiting skill instead:")
+                  print("")
+                  print("   ❌ await sleep(500)  # Guessing timeout")
+                  print("   ✅ await waitFor(() => condition)  # Wait for actual state")
+                  print("")
+                  print("   See: .claude/skills/condition-based-waiting/SKILL.md")
+                  break
+    test_cases:
+      - content: "time.sleep(1)"
+        file: "test_auth.py"
+        expect: triggered
+      - content: "await asyncio.sleep(0.5)"
+        file: "test_api.py"
+        expect: triggered
+      - content: "setTimeout(() => {}, 1000)"
+        file: "auth.test.ts"
+        expect: triggered
+      - content: "await waitFor(() => result.ready)"
+        file: "test_auth.py"
+        expect: not_triggered  # Good pattern
+      - content: "time.sleep(0.1)  # Rate limit required by API"
+        file: "test_external_api.py"
+        expect: triggered  # Still triggers, user can ignore with reason
+
+  - id: mock_assertion_detection
+    hypothesis_id: h2
+    description: Detect tests that only verify mock calls
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import re
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+          content = data.get('tool_input', {}).get('new_string', '')
+
+          # Only check test files
+          if not re.search(r'test.*\.(py|ts|js)', file_path):
+              sys.exit(0)
+
+          # Detect mock-only assertions
+          mock_patterns = [
+              r'expect\(.*mock.*\)\.toHaveBeenCalled',
+              r'expect\(.*spy.*\)\.toHaveBeenCalled',
+              r'mock\.assert_called',
+              r'\.assert_called_once\(',
+              r'\.assert_called_with\(',
+          ]
+
+          has_mock_assertion = any(re.search(p, content, re.I) for p in mock_patterns)
+
+          # Check if there are other meaningful assertions
+          value_assertions = [
+              r'expect\(.*\)\.toBe\(',
+              r'expect\(.*\)\.toEqual\(',
+              r'assert.*==',
+              r'assertEqual\(',
+          ]
+          has_value_assertion = any(re.search(p, content, re.I) for p in value_assertions)
+
+          if has_mock_assertion and not has_value_assertion:
+              print("🎭 MOCK-ONLY ASSERTION DETECTED")
+              print("   This test verifies mock behavior, not real behavior.")
+              print("")
+              print("   From testing-anti-patterns skill:")
+              print("   - Tests should verify WHAT code does, not that mocks were called")
+              print("   - Add assertions for actual return values or state changes")
+              print("")
+              print("   See: .claude/skills/testing-anti-patterns/SKILL.md")
+    test_cases:
+      - content: |
+          mock_db = Mock()
+          service.save(data)
+          mock_db.insert.assert_called_once()
+        file: "test_service.py"
+        expect: triggered  # Only mock assertion
+      - content: |
+          mock_db = Mock()
+          mock_db.insert.return_value = {"id": 1}
+          result = service.save(data)
+          expect(result["id"]).toBe(1)
+        file: "test_service.py"
+        expect: not_triggered  # Has value assertion
+
+  - id: anthropic_api_detection
+    hypothesis_id: h2
+    description: Detect Anthropic API usage instead of Agent SDK
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import re
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+          content = data.get('tool_input', {}).get('new_string', '')
+
+          # Skip deployed service code (API is appropriate there)
+          if '/api/' in file_path or '/server/' in file_path:
+              sys.exit(0)
+
+          # Detect Anthropic API usage
+          api_patterns = [
+              r'anthropic\.Anthropic\s*\(',
+              r'from\s+anthropic\s+import',
+              r'import\s+anthropic',
+          ]
+
+          if any(re.search(p, content) for p in api_patterns):
+              print("🔌 ANTHROPIC API DETECTED")
+              print("   For local scripts, use Agent SDK instead:")
+              print("")
+              print("   ❌ anthropic.Anthropic()  # Uses API credits")
+              print("   ✅ agent_sdk.Agent()      # Uses Claude subscription")
+              print("")
+              print("   See: .claude/skills/agent-sdk-basics/SKILL.md")
+    test_cases:
+      - content: "client = anthropic.Anthropic()"
+        file: "functional/scripts/analyze.py"
+        expect: triggered
+      - content: "from anthropic import Anthropic"
+        file: "process.py"
+        expect: triggered
+      - content: "from claude_sdk import Agent"
+        file: "analyze.py"
+        expect: not_triggered
+      - content: "anthropic.Anthropic()"
+        file: "api/routes/chat.py"
+        expect: not_triggered  # Server code, API appropriate
+
+  - id: latency_with_content
+    hypothesis_id: h3
+    description: Measure latency with content analysis enabled
+    observe:
+      - "Baseline: path-only detection latency"
+      - "With content: path + content detection latency"
+      - "Difference acceptable?"
+    success_criteria:
+      - "Content analysis adds < 100ms"
+      - "Total latency < 200ms"
+
+testing_process:
+  1_setup: |
+    Create hook: .claude/hooks/detect-content-patterns.py
+    Register for Edit|Write tools
+
+  2_test: |
+    For each test case:
+    1. Write/edit file with test content
+    2. Record: Did pattern trigger?
+    3. Record: Was it a true positive?
+
+  3_measure: |
+    For latency tests:
+    1. Time 50 edits without content analysis
+    2. Time 50 edits with content analysis
+    3. Compare distributions
+
+success_metrics:
+  - "Sleep pattern detection > 90% precision"
+  - "Mock assertion detection > 80% precision"
+  - "Latency acceptable (< 200ms total)"
+  - "False positives documented and handled"
+
+notes: |
+  Content analysis is more invasive and has privacy implications.
+  However, it catches anti-patterns that path-only can't.
+
+  Key risk: Performance. Content analysis must be fast.
+
+  Edge cases to handle:
+  - Comments containing patterns (should ignore?)
+  - Legitimate uses with explanatory comments
+  - Large files (need truncation?)

@@ -1,0 +1,187 @@
+# ABOUTME: Test plan for trace file capture in agentic operations
+# ABOUTME: Based on original vision - capturing prompts/responses for debugging
+
+feature:
+  name: trace_files_debugging
+  description: Capture trace files for scripts that manage multiple prompts and responses
+  category: agent-sdk
+
+# From original vision (docs/prompt):
+# "We should be able to use a flag for capturing trace files for scripts that
+#  manage multiple prompts and responses, such as agentic web search"
+original_requirements:
+  - Flag to enable/disable trace capture
+  - Capture all prompts sent
+  - Capture all responses received
+  - Capture tool calls and results
+  - Useful for debugging agentic workflows
+
+learning_goals:
+  - How to capture full conversation traces via Agent SDK
+  - Best format for trace files (JSON, JSONL, etc.)
+  - How much detail to capture (full vs summary)
+  - Performance impact of tracing
+  - Integration with sequential-processing skill
+
+hypotheses:
+  - id: h1
+    statement: "Agent SDK messages can be captured and logged in real-time"
+    evidence_needed:
+      - Message stream captured
+      - All message types logged
+      - Timestamps preserved
+
+  - id: h2
+    statement: "Trace files can be used to replay/debug conversations"
+    evidence_needed:
+      - Trace contains enough info to understand flow
+      - Can identify where errors occurred
+      - Can see tool inputs and outputs
+
+  - id: h3
+    statement: "JSONL format is best for streaming trace capture"
+    evidence_needed:
+      - Append-friendly (no JSON array issues)
+      - Each line is valid JSON
+      - Easy to parse incrementally
+
+  - id: h4
+    statement: "Trace files don't significantly impact performance"
+    evidence_needed:
+      - Compare with/without tracing
+      - Measure overhead
+      - Acceptable for development use
+
+experiments:
+  - id: message_capture
+    hypothesis_id: h1
+    description: Capture all message types from Agent SDK
+    setup: |
+      async def traced_query(prompt, trace_file):
+          with open(trace_file, 'a') as f:
+              async for message in query(prompt=prompt):
+                  entry = {
+                      'timestamp': datetime.now().isoformat(),
+                      'type': type(message).__name__,
+                      'content': serialize_message(message)
+                  }
+                  f.write(json.dumps(entry) + '\n')
+                  yield message
+    test_prompts:
+      - "Read test.txt and summarize it"
+    expected:
+      - Trace file contains SystemMessage
+      - Contains UserMessage
+      - Contains AssistantMessage
+      - Contains ToolUseBlock entries
+      - Contains ResultMessage
+
+  - id: trace_file_format
+    hypothesis_id: h3
+    description: Compare trace file formats
+    formats_to_test:
+      - jsonl: One JSON object per line
+      - json_array: Single JSON array
+      - structured_log: Human-readable with JSON payloads
+    criteria:
+      - Ease of streaming writes
+      - Ease of parsing
+      - File size
+      - Readability
+
+  - id: replay_debugging
+    hypothesis_id: h2
+    description: Use trace file to debug a failed operation
+    setup:
+      - Run operation that fails mid-way
+      - Capture trace
+    test:
+      - Can identify failure point from trace
+      - Can see what input caused failure
+      - Can understand Claude's reasoning before failure
+    expected:
+      - Clear failure point visible
+      - Sufficient context for debugging
+
+  - id: performance_impact
+    hypothesis_id: h4
+    description: Measure tracing overhead
+    test:
+      - Run same query 10 times without tracing
+      - Run same query 10 times with tracing
+      - Compare average duration
+    expected:
+      - Overhead < 10% acceptable for dev use
+      - Overhead < 5% ideal
+
+  - id: integration_pattern
+    hypothesis_id: h2
+    description: Pattern for integrating tracing into existing scripts
+    implement: |
+      class TracingWrapper:
+          def __init__(self, trace_dir, enabled=True):
+              self.trace_dir = trace_dir
+              self.enabled = enabled
+
+          async def query(self, prompt, **kwargs):
+              trace_file = self.trace_dir / f"trace_{timestamp}.jsonl"
+              async for msg in query(prompt=prompt, **kwargs):
+                  if self.enabled:
+                      self._log(trace_file, msg)
+                  yield msg
+    test:
+      - Enable with TRACE=1 env var
+      - Disable by default
+      - Files written to run_dir/traces/
+
+success_metrics:
+  - "Working trace capture implementation"
+  - "Format decision documented with rationale"
+  - "Integration pattern ready for use"
+  - "Performance impact measured"
+
+testing_process:
+  1_implement_basic: |
+    Create basic trace capture in run_experiment.py:
+    - Add --trace flag
+    - Write JSONL to trace_dir
+    - Capture all message types
+
+  2_test_capture: |
+    Run with tracing enabled:
+    python run_experiment.py --trace "Read test.txt and summarize"
+
+    Verify trace file contains:
+    - All message types
+    - Timestamps
+    - Tool calls and results
+
+  3_debug_scenario: |
+    Intentionally cause a failure:
+    - Ask to read non-existent file
+    - Review trace to find failure point
+    - Assess if trace is sufficient for debugging
+
+  4_measure_performance: |
+    Compare runs:
+    time python run_experiment.py "simple query" --no-trace
+    time python run_experiment.py "simple query" --trace
+
+    Calculate overhead percentage
+
+notes: |
+  This completes the debugging story from the original vision:
+
+  1. debugging_log.md - For manual debugging attempts (implemented via skill)
+  2. progress.jsonl - For process progress tracking (implemented via skill)
+  3. trace files - For agentic operation debugging (THIS TEST PLAN)
+
+  The trace files are particularly valuable for:
+  - Multi-step agentic workflows
+  - Operations that call external APIs
+  - Complex prompt chains
+  - Debugging "why did Claude do X?"
+
+  Consider integration with:
+  - sequential-processing skill (trace per run)
+  - parallel-processing skill (trace per worker?)

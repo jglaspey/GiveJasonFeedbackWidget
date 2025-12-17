@@ -1,0 +1,366 @@
+# ABOUTME: Test plan for session continuity patterns inspired by claude-harness
+# ABOUTME: Validates /start command, progress tracking, and checkpoint workflows
+
+feature:
+  name: session_continuity
+  description: Can structured session initialization and progress tracking improve multi-session work?
+  category: claude-code
+
+# Inspiration
+source:
+  repo: "https://github.com/panayiotism/claude-harness"
+  key_insight: "JSON-first progress tracking + slash commands for session lifecycle"
+  their_patterns:
+    - "/start command reads progress.json and feature-list.json"
+    - "claude-progress.json tracks lastSession, blockers, nextSteps"
+    - "/checkpoint commits + updates progress + creates PR"
+    - "JSON over Markdown for state (less corruption)"
+
+# What we're validating
+learning_goals:
+  - Does a /start command improve session initialization?
+  - Does structured progress.json complement our journal?
+  - Does a /checkpoint command streamline the commit→PR workflow?
+  - Is JSON more reliable than YAML/MD for state files?
+
+# Current state comparison
+current_vs_proposed:
+  session_start:
+    current: |
+      - SessionStart hook shows generic skill reminder
+      - No structured "what was I working on?" context
+      - Journal exists but must manually search
+      - Uncommitted work might be forgotten
+    proposed: |
+      - /start command runs structured initialization
+      - Reads progress.json for last session context
+      - Shows uncommitted work and pending tasks
+      - Surfaces relevant skills for current work
+      - Searches journal for recent insights
+
+  progress_tracking:
+    current: |
+      - TodoWrite for in-session task tracking (ephemeral)
+      - Journal for insights/learnings (semantic search)
+      - Time logs for duration tracking
+      - No structured "session summary" persistence
+    proposed: |
+      - project-progress.json for concrete session state
+      - Tracks: lastSession summary, completedTasks, blockers, nextSteps
+      - Complements journal (state vs insights)
+      - Survives session boundaries
+
+  checkpointing:
+    current: |
+      - Stop hook prompts for commits
+      - git-operations subagent for commits
+      - Manual PR creation
+      - Time tracking at session end
+    proposed: |
+      - /checkpoint command mid-session
+      - Combines: update progress → run tests → commit → push → PR
+      - More frequent, smaller checkpoints
+      - Progress file updated automatically
+
+hypotheses:
+  - id: h1
+    statement: "/start command reduces context-gathering time at session start"
+    metrics:
+      - "Time from session start to productive work"
+      - "Questions asked to understand context"
+      - "Mistakes from missing context"
+    evidence_needed:
+      - Baseline: sessions without /start
+      - Test: sessions with /start
+      - Compare time-to-productivity
+
+  - id: h2
+    statement: "progress.json improves cross-session continuity"
+    metrics:
+      - "Context retained between sessions"
+      - "Blockers remembered and addressed"
+      - "Next steps followed through"
+    evidence_needed:
+      - Track blockers/nextSteps persistence
+      - Measure follow-through rate
+
+  - id: h3
+    statement: "/checkpoint reduces friction for frequent commits"
+    metrics:
+      - "Commit frequency"
+      - "Time spent on git operations"
+      - "PR quality (description, verification)"
+    evidence_needed:
+      - Baseline commit frequency
+      - Test with /checkpoint command
+      - Compare workflow smoothness
+
+  - id: h4
+    statement: "JSON is more reliable than YAML/MD for state files"
+    rationale: "claude-harness claims 'models less likely to corrupt JSON'"
+    evidence_needed:
+      - Track file corruption incidents
+      - Compare JSON vs YAML parse errors
+      - Assess readability tradeoff
+
+experiments:
+  - id: start_command_design
+    hypothesis_id: h1
+    description: Design and test /start command
+    proposed_implementation: |
+      # .claude/commands/start.md
+
+      Session initialization command. Gather context and prepare for work.
+
+      ## Steps
+
+      1. **Check environment**
+         - Run `git status` to show uncommitted work
+         - Run `git log --oneline -5` for recent commits
+
+      2. **Load progress state**
+         - Read `project-progress.json` if exists
+         - Show last session summary, blockers, next steps
+
+      3. **Search journal**
+         - Query journal for entries from last 7 days
+         - Surface relevant insights for current project
+
+      4. **Check pending work**
+         - Look for open PRs
+         - Check for stale branches
+
+      5. **Report status**
+         - Summarize current state
+         - Recommend what to work on
+         - Surface applicable skills
+
+    test_cases:
+      - scenario: "Fresh session, has progress.json"
+        expect: "Shows last session context, recommends next steps"
+      - scenario: "Fresh session, no progress.json"
+        expect: "Creates initial progress.json, asks what to work on"
+      - scenario: "Session with uncommitted work"
+        expect: "Highlights uncommitted changes first"
+      - scenario: "Session with blockers from last time"
+        expect: "Surfaces blockers, asks if resolved"
+
+  - id: progress_json_schema
+    hypothesis_id: h2
+    description: Design progress.json schema
+    proposed_schema: |
+      {
+        "version": 1,
+        "lastUpdated": "2025-01-15T14:30:00Z",
+        "project": "agent-dev-harness",
+
+        "lastSession": {
+          "date": "2025-01-15",
+          "duration_minutes": 45,
+          "summary": "Designed skill enforcement test plans",
+          "completedTasks": [
+            "Created 8 test plan files",
+            "Fixed SessionStart hook configuration"
+          ],
+          "blockers": [
+            "Need to validate hook latency before implementing"
+          ],
+          "nextSteps": [
+            "Run latency baseline experiments",
+            "Prototype TDD enforcement hook"
+          ]
+        },
+
+        "recentSessions": [
+          // Last 5 sessions for context
+        ],
+
+        "knownIssues": [
+          {
+            "id": "issue-1",
+            "description": "Time tracking shows short durations",
+            "status": "investigating"
+          }
+        ],
+
+        "activeFeature": {
+          "name": "skill-enforcement-hooks",
+          "branch": "feature/skill-enforcement",
+          "pr": null,
+          "status": "in-progress"
+        }
+      }
+    validation:
+      - "Schema is parseable without errors"
+      - "Fields are consistently updated"
+      - "Historical data retained correctly"
+
+  - id: checkpoint_command_design
+    hypothesis_id: h3
+    description: Design and test /checkpoint command
+    proposed_implementation: |
+      # .claude/commands/checkpoint.md
+
+      Mid-session checkpoint. Save progress and optionally create PR.
+
+      ## Steps
+
+      1. **Update progress.json**
+         - Prompt for session summary
+         - Record completed tasks from TodoWrite
+         - Note any blockers encountered
+         - Define next steps
+
+      2. **Run verification**
+         - Execute test suite if exists
+         - Run linter if configured
+         - Report results
+
+      3. **Git operations** (if verification passes)
+         - Stage relevant changes
+         - Commit with descriptive message
+         - Push to remote
+
+      4. **PR management** (optional, if on feature branch)
+         - Create PR if none exists
+         - Update PR description with progress
+         - Add verification checklist
+
+      5. **Report**
+         - Show commit hash
+         - Show PR URL if created
+         - Summarize remaining work
+
+    test_cases:
+      - scenario: "Checkpoint with passing tests"
+        expect: "Commits, pushes, updates progress.json"
+      - scenario: "Checkpoint with failing tests"
+        expect: "Warns, asks whether to commit anyway"
+      - scenario: "Checkpoint on feature branch, no PR"
+        expect: "Offers to create PR"
+      - scenario: "Checkpoint on main branch"
+        expect: "Commits but skips PR creation"
+
+  - id: json_vs_yaml_reliability
+    hypothesis_id: h4
+    description: Compare JSON vs YAML corruption rates
+    methodology: |
+      Track over 4 weeks:
+      - Times Claude edits progress.json (JSON)
+      - Times Claude edits test plans (YAML)
+      - Parse errors after edits
+      - Manual fixes required
+    metrics:
+      - "Parse error rate per format"
+      - "Corruption severity (recoverable vs data loss)"
+    note: |
+      YAML is more readable but has more syntax edge cases.
+      JSON is stricter but less human-friendly.
+      May need to weigh reliability vs readability.
+
+  - id: start_vs_no_start_comparison
+    hypothesis_id: h1
+    description: A/B test session starts with and without /start
+    methodology: |
+      Week 1-2: Normal sessions (no /start command)
+      Week 3-4: Use /start at beginning of each session
+
+      Track per session:
+      - Minutes until first productive action
+      - Context questions asked
+      - Mistakes from missing context
+      - Subjective "prepared" rating (1-5)
+    success_criteria:
+      - "Time-to-productivity improves > 20%"
+      - "Context mistakes reduce > 50%"
+      - "Subjective rating improves"
+
+  - id: checkpoint_frequency_impact
+    hypothesis_id: h3
+    description: Does /checkpoint increase commit frequency?
+    methodology: |
+      Baseline: Track commits per hour for 2 weeks
+      Test: Use /checkpoint command for 2 weeks
+
+      Compare:
+      - Commits per hour
+      - Average commit size (files changed)
+      - PR quality (description completeness)
+    success_criteria:
+      - "Commit frequency increases"
+      - "Commit size decreases (more atomic)"
+      - "PR descriptions more complete"
+
+integration_with_existing:
+  journal:
+    relationship: "Complementary"
+    journal_purpose: "Insights, learnings, feelings - semantic search"
+    progress_purpose: "Concrete state - what was done, what's next"
+    overlap: "Both track session activity, different angles"
+
+  skills:
+    relationship: "/start can surface applicable skills"
+    integration: "Read project context, match to skill triggers"
+
+  hooks:
+    relationship: "/checkpoint could replace some Stop hook behavior"
+    integration: "Stop hook could prompt for /checkpoint if not run"
+
+  time_tracking:
+    relationship: "progress.json could include duration"
+    integration: "Session duration auto-recorded in progress.json"
+
+implementation_phases:
+  phase_1_minimal:
+    - "Create /start command (basic)"
+    - "Create project-progress.json schema"
+    - "Manual progress updates"
+    duration: "1 week validation"
+
+  phase_2_enhanced:
+    - "Add journal search to /start"
+    - "Create /checkpoint command"
+    - "Auto-update progress from TodoWrite"
+    duration: "2 week validation"
+
+  phase_3_integrated:
+    - "Integrate with Stop hook"
+    - "Add PR automation to /checkpoint"
+    - "Historical session analysis"
+    duration: "2 week validation"
+
+success_metrics:
+  - "Session initialization time reduced > 20%"
+  - "Cross-session context retention improved"
+  - "Commit frequency increased"
+  - "Blockers tracked and resolved"
+  - "Complements (not duplicates) existing journal"
+
+risks:
+  - risk: "progress.json becomes stale/ignored"
+    mitigation: "Hook reminder if not updated in session"
+
+  - risk: "Duplicates journal functionality"
+    mitigation: "Clear separation: state vs insights"
+
+  - risk: "Too much ceremony for short sessions"
+    mitigation: "/start and /checkpoint are optional, not enforced"
+
+  - risk: "JSON corruption despite claims"
+    mitigation: "Track and compare to YAML corruption rate"
+
+notes: |
+  Key insight from claude-harness: They use structured JSON for state
+  because "models are less likely to corrupt JSON files."
+
+  Our journal serves a different purpose - it's for insights and
+  learnings with semantic search. progress.json would be for
+  concrete session state that needs to survive session boundaries.
+
+  The /start command is the biggest potential win - it formalizes
+  what we often do manually (check git status, remember context,
+  figure out what to work on).
+
+  /checkpoint is interesting but might overlap with our Stop hook
+  and git-operations subagent. Worth testing whether the combined
+  workflow is smoother.

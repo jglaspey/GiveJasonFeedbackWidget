@@ -1,0 +1,260 @@
+# ABOUTME: Test plan for improving existing skills based on validated patterns
+# ABOUTME: Audits each skill against writing-skills best practices
+
+feature:
+  name: skill_improvements
+  description: Improving existing skills based on validated patterns from skill_creation experiments
+  category: skills
+
+# Validation criteria from writing-skills skill:
+# 1. Description uses "when" framing (Pattern #13, 0.95 confidence)
+# 2. Description has domain-specific keywords, not generic verbs (Pattern #14, 0.85 confidence)
+# 3. Large skills use progressive disclosure (Pattern #12, 0.90 confidence)
+# 4. References use explicit topic-to-file mapping (Pattern #7, 0.90 confidence)
+# 5. Size under 500 lines for SKILL.md (Experiment #24)
+
+skills_audit:
+
+  - skill: agent-sdk-basics
+    lines: 537
+    current_description: "Using Claude Agent SDK instead of Anthropic API for local scripts"
+    issues:
+      - description_framing: "what" not "when" - describes what SDK does
+      - size: 537 lines - exceeds recommended 500, no progressive disclosure
+      - keywords: "local scripts" is somewhat generic
+    suggested_description: "When writing Python scripts that call Claude locally, or when you want to use your Claude subscription instead of API credits"
+    suggested_structure: |
+      SKILL.md (~100 lines): Entry point with quick start
+      references/
+        installation.md: Setup and installation
+        patterns.md: Common usage patterns
+        streaming.md: Streaming responses
+        errors.md: Error handling
+    priority: high
+    reason: Most used skill for this harness, over size limit
+
+  - skill: directory-structure
+    lines: 198
+    current_description: "Standard directory layout for business process agents"
+    issues:
+      - description_framing: "what" not "when" - describes what it is
+      - keywords: "directory layout" is generic
+    suggested_description: "When starting a new business process project, organizing agent files, or separating generated outputs from functional code"
+    suggested_structure: null  # Size is fine
+    priority: medium
+    reason: Good size, just needs description fix
+
+  - skill: git-operations
+    lines: 512
+    current_description: "Safe git practices for AI agents, designed for subagent use with hook enforcement"
+    issues:
+      - description_framing: "what" not "when"
+      - size: 512 lines - at limit, could benefit from tiering
+      - keywords: "safe git practices" mixes generic and specific
+    suggested_description: "When committing changes, managing git branches, or when hooks prompt for git actions - MUST be used for all git commit operations"
+    suggested_structure: |
+      SKILL.md (~80 lines): Core safety rules, when to use
+      references/
+        safety.md: Dangerous commands, protection rules
+        commits.md: Commit workflow and messages
+        branches.md: Branch management
+        hooks.md: Hook integration
+    priority: high
+    reason: Critical skill, frequently used, at size limit
+
+  - skill: parallel-processing
+    lines: 536
+    current_description: "Concurrent processing with SQLite coordination for multiple workers (no race conditions)"
+    issues:
+      - description_framing: "what" not "when"
+      - size: 536 lines - exceeds 500, no progressive disclosure
+      - keywords: Good domain terms (SQLite, race conditions)
+    suggested_description: "When processing more than 100 items concurrently, coordinating multiple Python workers, or when you need SQLite-based progress tracking without race conditions"
+    suggested_structure: |
+      SKILL.md (~100 lines): When to use, quick patterns
+      references/
+        sqlite-schema.md: Database schema and setup
+        worker-pattern.md: Worker implementation
+        orchestration.md: Coordinating workers
+        recovery.md: Failure handling and resumption
+    priority: high
+    reason: Complex skill, over size limit
+
+  - skill: path-management
+    lines: 392
+    current_description: "Portable path handling that works across different machines"
+    issues:
+      - description_framing: "what" not "when"
+      - keywords: "portable path handling" is somewhat generic
+    suggested_description: "When writing code that runs on multiple machines, setting up projects for team use, or when you see hardcoded paths like /Users/username/"
+    suggested_structure: null  # Size is acceptable
+    priority: medium
+    reason: Good size, needs description improvement
+
+  - skill: agent-project-setup
+    lines: 207
+    current_description: "Overview of best practices for maintainable business process agents"
+    issues:
+      - description_framing: "what" not "when"
+      - keywords: "best practices" and "overview" are very generic
+    suggested_description: "When starting a new business process project, deciding which patterns to apply, or when you want a comprehensive guide to agent project setup"
+    suggested_structure: null  # This is already an overview that points to other skills
+    priority: low
+    reason: Overview skill, points to others
+
+  - skill: prompt-isolation
+    lines: 375
+    current_description: "Keep prompts in files separate from code for easy iteration"
+    issues:
+      - description_framing: "what" not "when"
+      - keywords: "prompts in files" is domain-specific (good)
+    suggested_description: "When building agents with prompts that need frequent refinement, or when you want to version and A/B test prompts separately from code"
+    suggested_structure: null  # Size is acceptable
+    priority: medium
+    reason: Good size, needs description improvement
+
+  - skill: sequential-processing
+    lines: 382
+    current_description: "Progress tracking and resumability for sequential processes with file-based logging"
+    issues:
+      - description_framing: "what" not "when"
+      - keywords: Good domain terms (resumability, JSONL, progress tracking)
+    suggested_description: "When processing items sequentially with a single worker, when you need to resume after failures, or when you want historical run records with JSONL logging"
+    suggested_structure: null  # Size is acceptable
+    priority: medium
+    reason: Good size, needs description improvement
+
+  - skill: settings-json-patterns
+    lines: 394
+    current_description: "Proven patterns for Claude Code settings.json permission configuration"
+    issues:
+      - description_framing: "what" not "when"
+      - keywords: Good domain terms (settings.json, permissions)
+    suggested_description: "When configuring Claude Code permissions, debugging tool permission errors, or when wildcards aren't matching expected files"
+    suggested_structure: null  # Size is acceptable
+    priority: medium
+    reason: Good size, critical skill, needs description improvement
+
+  - skill: writing-skills
+    lines: 85
+    current_description: "When creating new skills for Claude Code, documenting reusable workflows, or systematizing techniques that Claude should discover and apply automatically"
+    issues: []  # This skill was just created with best practices
+    suggested_structure: null
+    priority: none
+    reason: Just created, follows all patterns
+
+# Summary of issues found:
+summary:
+  total_skills: 10
+
+  description_issues:
+    count: 9
+    pattern: "All except writing-skills use 'what' framing instead of 'when'"
+
+  size_issues:
+    count: 3
+    skills: [agent-sdk-basics, git-operations, parallel-processing]
+    note: "All exceed 500 lines without progressive disclosure"
+
+  no_issues:
+    count: 1
+    skills: [writing-skills]
+
+# Prioritized improvement order:
+improvement_order:
+  - skill: agent-sdk-basics
+    priority: high
+    effort: medium
+    changes: [description, structure]
+
+  - skill: git-operations
+    priority: high
+    effort: medium
+    changes: [description, structure]
+
+  - skill: parallel-processing
+    priority: high
+    effort: medium
+    changes: [description, structure]
+
+  - skill: settings-json-patterns
+    priority: medium
+    effort: low
+    changes: [description]
+
+  - skill: sequential-processing
+    priority: medium
+    effort: low
+    changes: [description]
+
+  - skill: path-management
+    priority: medium
+    effort: low
+    changes: [description]
+
+  - skill: prompt-isolation
+    priority: medium
+    effort: low
+    changes: [description]
+
+  - skill: directory-structure
+    priority: medium
+    effort: low
+    changes: [description]
+
+  - skill: agent-project-setup
+    priority: low
+    effort: low
+    changes: [description]
+
+hypotheses:
+  - id: h1_description_improvement
+    statement: "Changing descriptions from 'what' to 'when' framing improves invocation rate"
+    test_method: |
+      1. Record current invocation rate for each skill
+      2. Update description to 'when' framing
+      3. Test with same prompts
+      4. Compare invocation rates
+
+  - id: h2_progressive_disclosure_large
+    statement: "Restructuring 500+ line skills with progressive disclosure improves effectiveness"
+    test_method: |
+      1. Restructure agent-sdk-basics with tiered approach
+      2. Test topic-specific queries
+      3. Verify Claude only loads relevant references
+      4. Compare token usage before/after
+
+experiments:
+  - id: quick_description_fixes
+    description: "Fix descriptions for all skills (low effort, high impact)"
+    skills: [all except writing-skills]
+    expected_improvement: "20-40% improvement in implicit invocation"
+
+  - id: structure_agent_sdk
+    description: "Restructure agent-sdk-basics with progressive disclosure"
+    current_lines: 537
+    target_entry_point: 100
+    expected_token_reduction: "70%"
+
+  - id: structure_git_operations
+    description: "Restructure git-operations with progressive disclosure"
+    current_lines: 512
+    target_entry_point: 80
+    expected_token_reduction: "70%"
+
+  - id: structure_parallel_processing
+    description: "Restructure parallel-processing with progressive disclosure"
+    current_lines: 536
+    target_entry_point: 100
+    expected_token_reduction: "70%"
+
+next_steps:
+  immediate:
+    - "Fix descriptions for all 9 skills (description-only changes)"
+    - "Test invocation rates before/after"
+
+  follow_up:
+    - "Restructure agent-sdk-basics with tiered approach"
+    - "Restructure git-operations with tiered approach"
+    - "Restructure parallel-processing with tiered approach"
+    - "Record all changes to knowledge_base.db"

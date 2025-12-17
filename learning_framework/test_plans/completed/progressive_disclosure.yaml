@@ -1,0 +1,146 @@
+# ABOUTME: Test plan for validating progressive disclosure pattern in skills
+# ABOUTME: Based on claims from "I Was Wrong About Skills" - tiered loading system
+
+feature:
+  name: progressive_disclosure
+  description: Does Claude read reference files only when the task requires them?
+  category: claude-code
+
+# Source: https://github.com/mrgoonie/claudekit-skills
+# Claim: 3-tier loading system dramatically improves efficiency
+source_claims:
+  - "Tier 1 (metadata): ~100 words, always loaded for relevance check"
+  - "Tier 2 (SKILL.md): ~200 lines max, loaded when skill activates"
+  - "Tier 3 (references): 200-300 lines each, loaded on-demand"
+  - "References are where the real work happens. SKILL.md is just the map."
+  - "85% reduction on initial activation with tiered approach"
+
+learning_goals:
+  - Does Claude only read reference files when needed?
+  - Can we observe the tiered loading in tool calls?
+  - Does mentioning a topic trigger reading the relevant reference?
+  - Is there measurable token savings from tiered vs monolithic?
+
+hypotheses:
+  - id: h1
+    statement: "Claude reads reference files only when the task requires specific information"
+    evidence_needed:
+      - Read tool calls for reference files
+      - Correlation between prompt topic and files read
+
+  - id: h2
+    statement: "A prompt about Topic A reads reference-a.md but not reference-b.md"
+    evidence_needed:
+      - Selective file reading observed
+      - No unnecessary reads
+
+  - id: h3
+    statement: "The entry point skill.md is always read, references are conditional"
+    evidence_needed:
+      - skill.md always in tool calls
+      - reference files vary by prompt
+
+experiments:
+  - id: tiered_skill_setup
+    description: Create a tiered skill with entry point + multiple references
+    setup:
+      skill_structure:
+        - skill.md: |
+            Entry point (~100 lines)
+            Points to references for:
+            - Database operations → see references/database.md
+            - API integration → see references/api.md
+            - Testing patterns → see references/testing.md
+        - references/database.md: "Detailed database instructions"
+        - references/api.md: "Detailed API instructions"
+        - references/testing.md: "Detailed testing instructions"
+
+  - id: test_database_topic
+    hypothesis_id: h2
+    description: Prompt about databases should read database.md only
+    test_prompts:
+      - "Use the tiered-skill to help me set up the database"
+    expected_reads:
+      - skill.md
+      - references/database.md
+    expected_not_read:
+      - references/api.md
+      - references/testing.md
+
+  - id: test_api_topic
+    hypothesis_id: h2
+    description: Prompt about APIs should read api.md only
+    test_prompts:
+      - "Use the tiered-skill to integrate with the external API"
+    expected_reads:
+      - skill.md
+      - references/api.md
+    expected_not_read:
+      - references/database.md
+      - references/testing.md
+
+  - id: test_general_prompt
+    hypothesis_id: h1
+    description: General prompt should read entry point but maybe not references
+    test_prompts:
+      - "Use the tiered-skill to help me"
+    expected_reads:
+      - skill.md
+    expected_behavior: "May or may not read references depending on interpretation"
+
+  - id: compare_monolithic
+    hypothesis_id: h1
+    description: Compare token usage - tiered vs monolithic skill
+    setup:
+      - tiered_skill: Entry point + 3 references
+      - monolithic_skill: Same content in one 600-line file
+    test_prompts:
+      - Same database prompt to both
+    measurements:
+      - tokens_used_tiered
+      - tokens_used_monolithic
+      - response_quality_comparison
+
+success_metrics:
+  - "Demonstrated selective reference reading"
+  - "Quantified token savings from tiered approach"
+  - "Confirmed entry point always read, references conditional"
+
+testing_process:
+  1_setup: |
+    Create tiered skill in tester_workspace/.claude/skills/tiered-skill/
+
+    Structure:
+    tiered-skill/
+    ├── skill.md           # Entry point with navigation
+    └── references/
+        ├── database.md    # Database-specific instructions
+        ├── api.md         # API-specific instructions
+        └── testing.md     # Testing-specific instructions
+
+    Also create monolithic version for comparison:
+    monolithic-skill/
+    └── skill.md           # All content in one file
+
+  2_test: |
+    Run experiments with verbose mode to see all Read calls:
+
+    python run_experiment.py -v "Use tiered-skill to set up the database"
+
+    Capture which files are read from tool_calls
+
+  3_analyze: |
+    For each experiment:
+    - List all Read tool calls
+    - Check if expected files were read
+    - Check if unexpected files were NOT read
+    - Compare token usage
+
+  4_record: |
+    python record_experiment.py \
+      --feature progressive_disclosure \
+      --hypothesis "..." \
+      --prompt "..." \
+      --expected ... \
+      --actual ... \
+      --notes "Files read: [list], Files not read: [list]"

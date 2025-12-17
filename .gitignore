@@ -1,0 +1,50 @@
+# Outputs and logs (but keep time_logs)
+outputs/
+!outputs/time_logs/
+logs/
+*.log
+test_results/
+workspaces/
+debugging_log.md
+
+# Private journal (local, not committed)
+.private-journal/
+
+# Secrets
+.env
+.env.*
+secrets.json
+credentials.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# Databases (but keep knowledge_base.db)
+*.sqlite
+*.sqlite3
+!learning_framework/knowledge_base.db
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Keep structure with .gitkeep
+!outputs/.gitkeep
+!logs/.gitkeep
+!test_results/.gitkeep

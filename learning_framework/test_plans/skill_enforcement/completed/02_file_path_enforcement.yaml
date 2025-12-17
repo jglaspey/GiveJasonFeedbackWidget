@@ -1,0 +1,259 @@
+# ABOUTME: Test plan for PreToolUse hooks that trigger on file paths
+# ABOUTME: Validates whether editing certain files can reliably enforce skill usage
+
+feature:
+  name: file_path_enforcement
+  description: Can PreToolUse hooks enforce skills based on file being edited?
+  category: skill_enforcement
+
+core_hypothesis: |
+  A PreToolUse hook on Edit|Write can detect the file path being modified
+  and enforce the appropriate skill for that file type.
+
+# File path → Skill mappings to validate
+path_skill_mappings:
+  - pattern: ".claude/skills/**/*.md"
+    skill: writing-skills
+    rationale: "Creating/editing skills should follow skill-writing patterns"
+
+  - pattern: ".claude/settings.json"
+    skill: settings-json-patterns
+    rationale: "Settings have specific patterns for permissions"
+
+  - pattern: "**/test*.py OR **/*_test.py OR **/tests/**/*.py"
+    skill: testing-anti-patterns
+    rationale: "Test code should avoid common anti-patterns"
+
+  - pattern: "**/workers/**/*.py"
+    skill: parallel-processing
+    rationale: "Worker code should follow parallel processing patterns"
+
+  - pattern: "functional/scripts/**/*.py (with item processing)"
+    skill: sequential-processing
+    rationale: "Processing scripts need resumability patterns"
+
+hypotheses:
+  - id: h1
+    statement: "File path detection is accurate and fast"
+    evidence_needed:
+      - Hook correctly identifies file path from tool_input
+      - Pattern matching works for glob-style patterns
+      - Latency < 100ms
+
+  - id: h2
+    statement: "Skill enforcement on skill files improves skill quality"
+    evidence_needed:
+      - When editing .claude/skills/**, writing-skills skill is surfaced
+      - Resulting skills follow documented patterns
+      - Compare skill quality with/without enforcement
+
+  - id: h3
+    statement: "Test file detection catches testing anti-patterns"
+    evidence_needed:
+      - Test files reliably detected
+      - Anti-pattern reminders shown
+      - Mock usage decreases after enforcement
+
+  - id: h4
+    statement: "False positive rate is acceptable"
+    evidence_needed:
+      - Non-matching files don't trigger
+      - Correct skill matched (not wrong skill)
+
+experiments:
+  - id: skill_file_detection
+    hypothesis_id: h2
+    description: Verify detection when editing skill files
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import fnmatch
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          if fnmatch.fnmatch(file_path, '*/.claude/skills/*'):
+              print("📚 SKILL FILE DETECTED")
+              print("   You MUST follow the writing-skills skill:")
+              print("   - Include ABOUTME comments")
+              print("   - Use standard YAML frontmatter")
+              print("   - Provide clear when_to_use guidance")
+              print("   - Include evidence section")
+    test_cases:
+      - file: ".claude/skills/new-skill/SKILL.md"
+        expect: triggered
+      - file: ".claude/skills/existing-skill/references/detail.md"
+        expect: triggered
+      - file: ".claude/CLAUDE.md"
+        expect: not_triggered
+      - file: "src/main.py"
+        expect: not_triggered
+
+  - id: settings_file_detection
+    hypothesis_id: h1
+    description: Verify detection when editing settings.json
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          if file_path.endswith('settings.json') and '.claude' in file_path:
+              print("⚙️ SETTINGS FILE DETECTED")
+              print("   Follow settings-json-patterns skill:")
+              print("   - Use correct permission syntax")
+              print("   - Test wildcards with git check-ignore")
+              print("   - Quote paths with special characters")
+    test_cases:
+      - file: ".claude/settings.json"
+        expect: triggered
+      - file: "projects/foo/.claude/settings.json"
+        expect: triggered
+      - file: "package.json"
+        expect: not_triggered
+      - file: "tsconfig.json"
+        expect: not_triggered
+
+  - id: test_file_detection
+    hypothesis_id: h3
+    description: Verify detection of test files
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import re
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          test_patterns = [
+              r'test_.*\.py$',
+              r'.*_test\.py$',
+              r'/tests?/.*\.py$',
+              r'.*\.test\.(ts|js|tsx|jsx)$',
+              r'.*\.spec\.(ts|js|tsx|jsx)$',
+          ]
+
+          is_test = any(re.search(p, file_path) for p in test_patterns)
+
+          if is_test:
+              print("🧪 TEST FILE DETECTED")
+              print("   Follow testing-anti-patterns skill:")
+              print("   - Don't test mock behavior")
+              print("   - Don't add test-only methods to production")
+              print("   - Understand dependencies before mocking")
+    test_cases:
+      - file: "tests/test_auth.py"
+        expect: triggered
+      - file: "src/auth_test.py"
+        expect: triggered
+      - file: "src/components/Button.test.tsx"
+        expect: triggered
+      - file: "src/auth.py"
+        expect: not_triggered
+      - file: "tests/conftest.py"
+        expect: triggered  # Still in tests dir
+      - file: "test_data/sample.json"
+        expect: not_triggered  # Not a test file
+
+  - id: worker_file_detection
+    hypothesis_id: h1
+    description: Verify detection of worker files
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          if '/workers/' in file_path and file_path.endswith('.py'):
+              print("⚡ WORKER FILE DETECTED")
+              print("   Follow parallel-processing skill:")
+              print("   - Use SQLite for coordination (NOT files)")
+              print("   - Atomic status transitions")
+              print("   - Run orchestrator in subagent")
+    test_cases:
+      - file: "functional/workers/process_item.py"
+        expect: triggered
+      - file: "projects/foo/functional/workers/worker.py"
+        expect: triggered
+      - file: "functional/scripts/main.py"
+        expect: not_triggered
+
+  - id: latency_measurement
+    hypothesis_id: h1
+    description: Measure hook execution time
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import time
+
+          start = time.time()
+
+          data = json.load(sys.stdin)
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          # Run all pattern checks
+          # ... (full logic)
+
+          elapsed = (time.time() - start) * 1000
+          if elapsed > 100:
+              print(f"⚠️ Hook latency: {elapsed:.0f}ms", file=sys.stderr)
+    observe:
+      - Measure across 50+ Edit operations
+      - Calculate mean, p95, max latency
+    success_criteria:
+      - "Mean < 50ms"
+      - "P95 < 100ms"
+      - "Max < 500ms"
+
+testing_process:
+  1_setup: |
+    Create hook script: .claude/hooks/enforce-file-skills.py
+    Implement all pattern checks in single script
+
+  2_test: |
+    For each test case:
+    1. Trigger Edit/Write on file
+    2. Record: Did hook trigger? Which skill?
+    3. Record: Was it the correct skill?
+
+  3_record: |
+    python record_experiment.py \
+      --feature file_path_enforcement \
+      --hypothesis "h1" \
+      --prompt "Edit file: X" \
+      --expected triggered:skill-name|not_triggered \
+      --actual triggered:skill-name|not_triggered \
+      --notes "Latency: Xms"
+
+success_metrics:
+  - "100% accuracy on file path detection"
+  - "Correct skill surfaced for each pattern"
+  - "Latency acceptable (< 100ms mean)"
+  - "No interference with normal editing flow"

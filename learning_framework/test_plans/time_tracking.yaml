@@ -1,0 +1,265 @@
+# ABOUTME: Test plan for fixing time tracking accuracy issues
+# ABOUTME: Investigates session boundary detection and duration calculation
+
+feature:
+  name: time_tracking
+  description: Accurate time tracking across session boundaries and context continuations
+  category: hooks
+
+problem_statement: |
+  Time tracking reported 7 minutes for work that clearly took much longer.
+
+  Root cause: The session-start-tracking.py hook fires on UserPromptSubmit,
+  which runs on EVERY user message. When the time-tracker cleans up the
+  session file, the next user message creates a new start time, resetting
+  the clock.
+
+  This is especially problematic for:
+  - Sessions that run out of context and continue with a summary
+  - Long sessions with multiple stop/continue cycles
+  - Sessions where time-tracker is invoked mid-session
+
+current_architecture:
+  hooks:
+    UserPromptSubmit:
+      script: session-start-tracking.py
+      behavior: |
+        - Writes /tmp/claude_session_start_{session_id} with ISO timestamp
+        - Only writes if file doesn't exist
+        - Fires on EVERY user message
+
+    Stop:
+      script: track-session-time.py
+      behavior: |
+        - Reads start time from /tmp file
+        - Calculates duration
+        - If >= 5 minutes, blocks stop with exit code 2
+        - Prompts agent to use time-tracker subagent
+
+  subagent:
+    name: time-tracker
+    behavior: |
+      - Reads start time from /tmp file
+      - Analyzes git commits
+      - Writes time entry to outputs/time_logs/YYYY-MM.jsonl
+      - DELETES the /tmp session file (this is the problem!)
+
+failure_modes:
+  - id: f1_cleanup_resets_clock
+    description: "time-tracker deletes session file, next UserPromptSubmit creates new one"
+    scenario: |
+      1. Session starts at 10:00 AM
+      2. Work happens for 1 hour
+      3. User tries to stop at 11:00 AM
+      4. Stop hook fires, shows "60 minutes"
+      5. time-tracker logs entry, deletes session file
+      6. User continues working
+      7. Next message creates NEW start time (11:00 AM)
+      8. User stops at 11:07 AM
+      9. Shows "7 minutes" instead of cumulative time
+    impact: Severely underreports time
+
+  - id: f2_context_continuation
+    description: "Context runs out, session continues with summary"
+    scenario: |
+      1. Session starts at 10:00 AM
+      2. Context runs out at 10:45 AM
+      3. Session continues with summary (new session_id?)
+      4. session_id changes = new start time
+      5. Time from 10:00-10:45 lost
+    impact: Loses time from previous context window
+    question: Does session_id change on context continuation?
+
+  - id: f3_multiple_stop_attempts
+    description: "User triggers stop multiple times"
+    scenario: |
+      1. User tries to stop
+      2. Stop hook blocks, shows duration
+      3. User doesn't invoke time-tracker, continues working
+      4. User tries to stop again later
+      5. Same session file, correct cumulative time
+    impact: None - this actually works correctly
+    note: Session file persists until explicitly cleaned up
+
+hypotheses:
+  - id: h1_dont_delete_on_log
+    statement: "Don't delete session file when logging time; only delete on explicit end"
+    pros:
+      - Cumulative time tracking across multiple log entries
+      - Works for continued sessions
+    cons:
+      - Stop hook will keep blocking (need different signal)
+      - Need explicit "end session" command
+    implementation: |
+      1. time-tracker writes entry but doesn't delete file
+      2. Add marker to file indicating "logged" state
+      3. Stop hook checks for "logged" marker, allows stop if present
+      4. File cleaned up by UserPromptSubmit of NEXT session
+
+  - id: h2_track_cumulative_in_file
+    statement: "Store cumulative minutes in session file, not just start time"
+    pros:
+      - Accurate cumulative tracking
+      - Works across multiple log entries
+    cons:
+      - More complex file format
+      - Need to update file on each log
+    implementation: |
+      File format: {"start": "ISO", "logged_minutes": 45, "entries": [...]}
+      Each log adds to logged_minutes
+      Duration = now - start (total) vs logged_minutes (already recorded)
+
+  - id: h3_use_git_timestamps
+    statement: "Calculate time from git commit timestamps instead of session file"
+    pros:
+      - Based on actual work evidence
+      - Survives session boundaries
+    cons:
+      - Misses work without commits
+      - Commits might span multiple sessions
+    implementation: |
+      1. Find first and last commit in relevant time window
+      2. Use commit timestamps as session boundaries
+      3. Add buffer for pre-first-commit and post-last-commit work
+
+  - id: h4_session_id_persistence
+    statement: "Check if session_id persists across context continuations"
+    test: |
+      1. Start session, note session_id
+      2. Run until context exhausted
+      3. Continue session
+      4. Check if session_id is same or different
+    impact: If same, f2 isn't a problem. If different, need cross-session tracking.
+
+  - id: h5_marker_file_approach
+    statement: "Use separate marker file for 'time logged' vs 'session active'"
+    pros:
+      - Clean separation of concerns
+      - Stop hook can check marker, allow stop if logged
+      - Session file stays for cumulative tracking
+    cons:
+      - Two files to manage
+      - Cleanup complexity
+    implementation: |
+      /tmp/claude_session_start_{id} - start timestamp
+      /tmp/claude_session_logged_{id} - exists if time was logged this session
+
+      Stop hook: if logged marker exists, exit 0 (allow stop)
+      time-tracker: creates logged marker, doesn't delete start file
+      UserPromptSubmit: if new session, clean up old files
+
+experiments:
+  - id: test_session_id_persistence
+    hypothesis_id: h4_session_id_persistence
+    description: "Verify whether session_id changes on context continuation"
+    method: |
+      1. Check current session_id from hook input
+      2. Run conversation until context warning
+      3. Continue with summary
+      4. Check new session_id
+      5. Compare
+    expected_outcome: "Need to determine empirically"
+
+  - id: test_marker_approach
+    hypothesis_id: h5_marker_file_approach
+    description: "Implement and test marker file approach"
+    method: |
+      1. Modify track-session-time.py to check for logged marker
+      2. Modify time-tracker to create marker instead of deleting start
+      3. Test: log time, continue working, stop again
+      4. Verify stop is allowed after logging
+    success_criteria:
+      - First stop blocked, prompts time logging
+      - After logging, stop allowed
+      - If work continues, new stop shows cumulative time
+
+  - id: test_git_based_time
+    hypothesis_id: h3_use_git_timestamps
+    description: "Test accuracy of git-based time calculation"
+    method: |
+      1. Record actual session start time manually
+      2. Work for known duration with commits
+      3. Compare git-derived time vs actual
+    success_criteria:
+      - Within 10% of actual time for commit-heavy sessions
+      - Document limitations for commit-light sessions
+
+recommended_approach: |
+  Based on analysis, h5 (marker file approach) seems most promising:
+
+  1. Simplest change to existing architecture
+  2. Preserves cumulative tracking
+  3. Allows clean stop after logging
+  4. Can be combined with h3 (git timestamps) for better accuracy
+
+  Implementation steps:
+  1. Test h4 first - understand session_id behavior
+  2. Implement h5 marker approach
+  3. Consider h3 as enhancement for accuracy
+
+test_results:
+  test_2_cleanup_behavior:
+    date: 2025-12-01
+    status: completed
+    findings:
+      - id: bug_timezone
+        severity: critical
+        description: |
+          Session start stored as LOCAL time (e.g., 2025-12-01T16:46:59)
+          but duration calculated against UTC (e.g., 2025-12-02T00:48:34Z).
+          This caused 480 minutes (8 hours) to be logged instead of ~20 minutes.
+        root_cause: |
+          session-start-tracking.py uses datetime.now().isoformat() (local time)
+          time-tracker likely uses datetime.now(timezone.utc) or similar
+        fix: Use timezone-aware timestamps consistently (UTC throughout)
+
+      - id: bug_session_id_changes
+        severity: high
+        description: |
+          When context continues from a previous session, a NEW session_id is assigned.
+          The old session file (with old session_id) is orphaned.
+          New session creates new file with new session_id.
+        evidence: |
+          Previous session: test-123 (file exists at /tmp/claude_session_start_test-123)
+          Current session: 8c004f40-8a67-4198-a77c-2b3d3eda459b (new file created)
+        impact: |
+          Time from previous context window is lost when session continues.
+          This confirms f2_context_continuation failure mode.
+        fix: Need cross-session tracking or git-based time calculation
+
+  test_4_session_id_persistence:
+    date: 2025-12-01
+    status: completed
+    findings:
+      - id: session_id_does_change
+        description: |
+          Confirmed: session_id CHANGES when context continues.
+          Old session: test-123
+          New session: 8c004f40-8a67-4198-a77c-2b3d3eda459b
+        impact: h4 hypothesis confirmed - need cross-session tracking
+
+implementation:
+  timezone_fix:
+    date: 2025-12-01
+    status: completed
+    commits:
+      - "61bf276 Use UTC time for session start tracking"
+      - "0992ac3 Fix timezone bug in track-session-time.py"
+    changes:
+      - session-start-tracking.py now uses datetime.now(timezone.utc)
+      - track-session-time.py now uses datetime.now(timezone.utc)
+
+  marker_file_approach:
+    date: 2025-12-01
+    status: completed
+    commit: "08045fe Implement marker file approach for time tracking (h5)"
+    changes:
+      - track-session-time.py checks for logged marker before blocking
+      - session-start-tracking.py only writes if file doesn't exist (preserves start time)
+      - session-start-tracking.py cleans up old session files from OTHER sessions
+      - time-tracker.md updated to create marker instead of deleting start file
+
+next_steps:
+  - Monitor for remaining edge cases
+  - Consider git-based time as enhancement for cross-session tracking
+  - Record validated patterns to knowledge_base.db

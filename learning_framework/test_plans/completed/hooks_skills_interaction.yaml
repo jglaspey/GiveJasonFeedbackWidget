@@ -1,0 +1,181 @@
+# ABOUTME: Test plan for understanding how hooks and skills interact
+# ABOUTME: Based on claims from "Stop Teaching Agents" community insight
+
+feature:
+  name: hooks_skills_interaction
+  description: How do hooks affect skill invocation and behavior?
+  category: claude-code
+
+# Source: "Stop Teaching Agents, Make Them Unable to Fail"
+# Key distinction: Hooks = automatic (system decides), Skills = workflow (agent decides)
+source_claims:
+  - "Hook: External trigger - System decides when to inject"
+  - "Skill: Internal trigger - Agent decides when to invoke"
+  - "Hooks inject context automatically"
+  - "Skills make workflows reusable across sessions"
+  - "Both inject content into the conversation. The difference is the trigger."
+
+learning_goals:
+  - Do hooks run before or after skill invocation decision?
+  - Can hook output influence skill invocation?
+  - Are hooks and skills orthogonal (don't interfere)?
+  - Can hooks enhance skill behavior?
+
+hypotheses:
+  - id: h1
+    statement: "UserPromptSubmit hooks run before skill invocation decision"
+    evidence_needed:
+      - Hook output visible in conversation before skill loading
+      - Order of operations in message stream
+
+  - id: h2
+    statement: "Hook output can influence whether a skill is invoked"
+    evidence_needed:
+      - Hook that adds "use skill X" context triggers invocation
+      - Same prompt without hook doesn't invoke skill
+
+  - id: h3
+    statement: "Hooks and skills are orthogonal - they don't interfere"
+    evidence_needed:
+      - Adding hooks doesn't break existing skill invocation
+      - Skills work the same with or without hooks
+
+  - id: h4
+    statement: "PreToolUse hooks can modify skill behavior"
+    evidence_needed:
+      - Hook that runs before Skill tool can add context
+      - Skill receives modified input
+
+experiments:
+  - id: hook_timing
+    hypothesis_id: h1
+    description: Observe when UserPromptSubmit hook runs relative to skill invocation
+    setup:
+      hook_config:
+        type: UserPromptSubmit
+        script: |
+          #!/bin/bash
+          echo "HOOK_MARKER: UserPromptSubmit ran at $(date)"
+    test_prompts:
+      - "Use the test-skill to do something"
+    observe:
+      - Order of HOOK_MARKER vs skill loading message
+      - Message stream sequence
+
+  - id: hook_influences_invocation
+    hypothesis_id: h2
+    description: Test if hook can trigger skill invocation
+    setup:
+      hook_config:
+        type: UserPromptSubmit
+        script: |
+          #!/bin/bash
+          echo "Context: You should use the test-skill-detailed skill for this task"
+    test_prompts:
+      # Without hook, this wouldn't trigger skill (based on earlier experiments)
+      - "Analyze test.txt"
+    expected:
+      with_hook: skill_invoked
+      without_hook: skill_not_invoked  # confirmed in earlier experiments
+
+  - id: hook_adds_context
+    hypothesis_id: h2
+    description: Hook injects project context that makes skill more relevant
+    setup:
+      hook_config:
+        type: UserPromptSubmit
+        script: |
+          #!/bin/bash
+          echo "Project context: This is a text analysis project. Use text analysis skills."
+    test_prompts:
+      - "Check this file"
+    observe:
+      - Does added context increase skill invocation likelihood?
+
+  - id: orthogonality_test
+    hypothesis_id: h3
+    description: Verify hooks don't break skill invocation
+    setup:
+      - baseline: No hooks, skill invokes on "Find anomalies"
+      - with_hook: Add unrelated hook, same test
+    test_prompts:
+      - "Find anomalies in test.txt"
+    expected:
+      - Skill invokes regardless of unrelated hook presence
+
+  - id: pre_tool_use_hook
+    hypothesis_id: h4
+    description: Test if PreToolUse hook can modify skill input
+    setup:
+      hook_config:
+        type: PreToolUse
+        tool: Skill
+        script: |
+          #!/bin/bash
+          echo "PRE_SKILL_MARKER: About to invoke skill"
+          # Could potentially modify or add context here
+    test_prompts:
+      - "Use the test-skill-detailed skill"
+    observe:
+      - Does hook run before skill content loads?
+      - Can hook output appear in skill context?
+
+success_metrics:
+  - "Clear understanding of hook/skill timing"
+  - "Confirmed whether hooks can influence skill invocation"
+  - "Documented orthogonality (or lack thereof)"
+  - "Patterns for combining hooks and skills effectively"
+
+testing_process:
+  1_setup: |
+    Create hooks in tester_workspace/.claude/settings.json
+
+    Example hook configuration:
+    {
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "matcher": "",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "echo 'HOOK_OUTPUT: $(date)'"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  2_test: |
+    Run experiments with verbose mode:
+    python run_experiment.py -v "Your test prompt"
+
+    Look for:
+    - Hook output in SystemMessage or early in stream
+    - Order of skill invocation relative to hook
+
+  3_compare: |
+    For influence tests:
+    - Run same prompt WITH and WITHOUT hook
+    - Compare skill invocation rates
+    - Document any differences
+
+  4_record: |
+    python record_experiment.py \
+      --feature hooks_skills_interaction \
+      --hypothesis "..." \
+      --prompt "..." \
+      --expected ... \
+      --actual ... \
+      --notes "Hook present: yes/no, Skill invoked: yes/no"
+
+notes: |
+  Hook types available:
+  - UserPromptSubmit: Runs before user prompt is processed
+  - PreToolUse: Runs before a tool is used
+  - PostToolUse: Runs after a tool completes
+  - Stop: Runs when session ends
+
+  Key question: Can hooks be used to RELIABLY trigger skills,
+  or is explicit skill naming still the only reliable method?

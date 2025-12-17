@@ -1,0 +1,289 @@
+# ABOUTME: Test plan for enforcing TDD workflow via session state tracking
+# ABOUTME: Validates whether hooks can detect "test before production code" pattern
+
+feature:
+  name: tdd_enforcement
+  description: Can hooks enforce TDD by tracking file edit order within a session?
+  category: skill_enforcement
+
+core_hypothesis: |
+  TDD enforcement requires session state: tracking that a test file was edited
+  BEFORE the corresponding production file. A PreToolUse hook can maintain
+  this state and warn when production code is edited without a prior test.
+
+# TDD rule to enforce
+tdd_rule: |
+  For any production file edit:
+  1. A corresponding test file should have been edited FIRST in this session
+  2. The test should have been RUN and FAILED before production code written
+  3. After production code, test should PASS
+
+  This experiment focuses on #1 (file order tracking).
+  #2 and #3 require Bash tool tracking (future experiment).
+
+hypotheses:
+  - id: h1
+    statement: "Session state can track file edit order"
+    approach: |
+      Use temp file to track edited files per session:
+      /tmp/claude_session_{session_id}_edits.json
+    evidence_needed:
+      - State persists across tool calls
+      - State resets between sessions
+      - Order accurately tracked
+
+  - id: h2
+    statement: "Production-before-test can be reliably detected"
+    approach: |
+      When editing production file, check if corresponding test was edited first.
+      Mapping: src/foo.py → tests/test_foo.py OR src/foo_test.py
+    evidence_needed:
+      - Detection accuracy > 90%
+      - Handles various test naming conventions
+      - Handles nested directories
+
+  - id: h3
+    statement: "Warning at edit time changes behavior"
+    approach: |
+      When violation detected, warn:
+      "⚠️ TDD VIOLATION: You're editing production code without a failing test"
+    evidence_needed:
+      - I actually stop and write test first
+      - Or acknowledge violation with reason
+
+  - id: h4
+    statement: "Test file naming conventions can be reliably mapped"
+    conventions:
+      python:
+        - "src/foo.py → tests/test_foo.py"
+        - "src/foo.py → src/foo_test.py"
+        - "src/module/bar.py → tests/module/test_bar.py"
+      typescript:
+        - "src/foo.ts → src/foo.test.ts"
+        - "src/foo.ts → __tests__/foo.test.ts"
+        - "src/components/Bar.tsx → src/components/Bar.test.tsx"
+    evidence_needed:
+      - Mapping works for each convention
+      - Unknown conventions handled gracefully
+
+experiments:
+  - id: session_state_persistence
+    hypothesis_id: h1
+    description: Verify session state persists across tool calls
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.load(sys.stdin)
+          session_id = data.get('session_id', 'unknown')
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          state_file = Path(f'/tmp/claude_tdd_state_{session_id}.json')
+
+          # Load existing state
+          if state_file.exists():
+              state = json.loads(state_file.read_text())
+          else:
+              state = {'edited_files': [], 'test_files_edited': []}
+
+          # Track this edit
+          state['edited_files'].append(file_path)
+
+          # Track if it's a test file
+          if 'test' in file_path.lower():
+              state['test_files_edited'].append(file_path)
+
+          # Save state
+          state_file.write_text(json.dumps(state, indent=2))
+
+          # Output current state for debugging
+          print(f"DEBUG: Session state - {len(state['edited_files'])} files edited", file=sys.stderr)
+    test_sequence:
+      - edit: "tests/test_auth.py"
+        expect_state: "1 file edited, 1 test file"
+      - edit: "src/auth.py"
+        expect_state: "2 files edited, 1 test file"
+      - edit: "tests/test_user.py"
+        expect_state: "3 files edited, 2 test files"
+    verify:
+      - State file contains all edits in order
+      - State resets when session_id changes
+
+  - id: test_mapping_python
+    hypothesis_id: h4
+    description: Test Python test file mapping
+    mapping_function: |
+      def find_test_file(production_file):
+          """Map production file to expected test file(s)"""
+          path = Path(production_file)
+
+          # src/foo.py → tests/test_foo.py
+          if 'src' in path.parts:
+              idx = path.parts.index('src')
+              test_path = Path('tests') / Path(*path.parts[idx+1:])
+              test_path = test_path.parent / f'test_{test_path.name}'
+              candidates.append(test_path)
+
+          # src/foo.py → src/foo_test.py (same dir)
+          candidates.append(path.parent / f'{path.stem}_test{path.suffix}')
+
+          return candidates
+    test_cases:
+      - production: "src/auth.py"
+        expected_tests:
+          - "tests/test_auth.py"
+          - "src/auth_test.py"
+      - production: "src/services/user.py"
+        expected_tests:
+          - "tests/services/test_user.py"
+          - "src/services/user_test.py"
+      - production: "functional/scripts/process.py"
+        expected_tests:
+          - "tests/functional/scripts/test_process.py"
+          - "functional/scripts/process_test.py"
+
+  - id: tdd_violation_detection
+    hypothesis_id: h2
+    description: Detect when production edited before test
+    setup:
+      hook_config:
+        type: PreToolUse
+        matcher: "Edit|Write"
+        script: |
+          #!/usr/bin/env python3
+          import json
+          import sys
+          import re
+          from pathlib import Path
+
+          data = json.load(sys.stdin)
+          session_id = data.get('session_id', 'unknown')
+          file_path = data.get('tool_input', {}).get('file_path', '')
+
+          # Skip if this IS a test file
+          if re.search(r'test.*\.(py|ts|js)|_test\.(py|ts|js)|\.test\.(ts|js)', file_path):
+              sys.exit(0)
+
+          # Skip non-code files
+          if not re.search(r'\.(py|ts|tsx|js|jsx)$', file_path):
+              sys.exit(0)
+
+          # Load session state
+          state_file = Path(f'/tmp/claude_tdd_state_{session_id}.json')
+          if state_file.exists():
+              state = json.loads(state_file.read_text())
+          else:
+              state = {'test_files_edited': []}
+
+          # Find expected test files for this production file
+          expected_tests = find_test_files(file_path)  # mapping function
+
+          # Check if any expected test was edited first
+          test_edited_first = any(
+              test in state['test_files_edited']
+              for test in expected_tests
+          )
+
+          if not test_edited_first:
+              print("🚨 TDD VIOLATION DETECTED")
+              print(f"   You're editing production code: {file_path}")
+              print(f"   But no corresponding test file was edited first.")
+              print("")
+              print("   Expected test file(s):")
+              for test in expected_tests:
+                  print(f"     - {test}")
+              print("")
+              print("   TDD requires: Write failing test FIRST, then production code.")
+              print("")
+              print("   Options:")
+              print("   1. Stop and write the test first (recommended)")
+              print("   2. Acknowledge this is intentional (e.g., config file)")
+              print("")
+              print("   See: .claude/skills/test-driven-development/SKILL.md")
+    test_sequences:
+      - name: "correct_tdd_order"
+        edits:
+          - {file: "tests/test_auth.py", expect: "no_warning"}
+          - {file: "src/auth.py", expect: "no_warning"}  # Test was first
+
+      - name: "violation_production_first"
+        edits:
+          - {file: "src/auth.py", expect: "warning"}  # No test edited yet
+
+      - name: "wrong_test_edited"
+        edits:
+          - {file: "tests/test_user.py", expect: "no_warning"}
+          - {file: "src/auth.py", expect: "warning"}  # Wrong test file
+
+  - id: behavior_change_measurement
+    hypothesis_id: h3
+    description: Does the warning actually change behavior?
+    setup:
+      baseline: "Work without TDD enforcement for 1 week, count violations"
+      with_enforcement: "Work with TDD enforcement for 1 week, count violations"
+    metrics:
+      - "Violations per day (baseline vs enforced)"
+      - "Times warning was followed"
+      - "Times warning was ignored (with reason)"
+      - "Times warning was false positive"
+    success_criteria:
+      - "Violations decrease > 50%"
+      - "False positive rate < 20%"
+
+testing_process:
+  1_setup: |
+    Create hook: .claude/hooks/enforce-tdd.py
+    Implement:
+    - Session state management
+    - Test file mapping
+    - Violation detection
+
+  2_test_state: |
+    Verify session state works:
+    1. Edit multiple files
+    2. Check state file contains all
+    3. Start new session, verify reset
+
+  3_test_mapping: |
+    For each production file pattern:
+    1. Verify correct test files identified
+    2. Check all naming conventions covered
+
+  4_test_violation: |
+    Test sequences:
+    1. Edit test first, then production → no warning
+    2. Edit production first → warning
+    3. Edit wrong test, then production → warning
+
+  5_measure_behavior: |
+    After 1 week with enforcement:
+    - Count warnings shown
+    - Count times behavior changed
+    - Assess false positive impact
+
+success_metrics:
+  - "Session state reliably persists"
+  - "Test file mapping > 95% accurate"
+  - "Violations detected > 90% of time"
+  - "Behavior change observed (subjective)"
+
+notes: |
+  This is the most complex enforcement because it requires state.
+
+  Key challenges:
+  1. Session ID must be available in hook input
+  2. Test naming conventions vary widely
+  3. Some production code legitimately doesn't need tests
+
+  Future enhancement:
+  - Track Bash tool calls for pytest/npm test
+  - Verify test actually failed before production edit
+  - Verify test passes after production edit
+
+  This would give full TDD cycle enforcement, not just file order.

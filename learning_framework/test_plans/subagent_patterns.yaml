@@ -1,0 +1,200 @@
+# ABOUTME: Test plan for understanding subagent patterns and orchestration
+# ABOUTME: Based on original vision - git subagent, time tracking, worker orchestration
+
+feature:
+  name: subagent_patterns
+  description: How to effectively use subagents for delegation and isolation
+  category: claude-code
+
+# From original vision (docs/prompt):
+# "I could have subagents for tasks like committing to github and tracking my time"
+# "If we have python workers working in parallel, that should be done by a subagent
+#  so we don't pollute the process orchestrators context window"
+original_requirements:
+  - Subagents for specialized tasks (git, time tracking)
+  - Context isolation (parallel workers in subagent)
+  - Delegation patterns
+
+# From project implementation:
+# - git-operations agent exists (.claude/agents/git-operations.md)
+# - time-tracker agent exists (.claude/agents/time-tracker.md)
+# - SubagentStop hook implemented
+existing_implementation:
+  - git-operations.md: Agent for safe git operations
+  - time-tracker.md: Agent for session time logging
+  - verify-git-subagent.py: Hook to verify git commits
+
+learning_goals:
+  - How to spawn subagents effectively
+  - What context transfers to subagents
+  - How to communicate results back
+  - Best patterns for context isolation
+  - Performance implications of subagents
+
+hypotheses:
+  - id: h1
+    statement: "Subagents have isolated context (don't pollute main agent)"
+    evidence_needed:
+      - Main agent context before/after subagent
+      - Subagent doesn't see main conversation
+      - Results returned cleanly
+
+  - id: h2
+    statement: "Subagents can be specialized via agent files"
+    evidence_needed:
+      - .claude/agents/NAME.md loads for subagent
+      - Subagent has specialized behavior
+      - Different from main agent behavior
+
+  - id: h3
+    statement: "SubagentStop hooks can enforce subagent completion"
+    evidence_needed:
+      - Hook fires when subagent stops
+      - Can verify expected outcome
+      - Can block if outcome not met
+
+  - id: h4
+    statement: "Task tool is the primary way to spawn subagents"
+    evidence_needed:
+      - Task tool creates subagent
+      - Parameters control subagent behavior
+      - Results returned to parent
+
+  - id: h5
+    statement: "Subagents are better than inline work for certain tasks"
+    evidence_needed:
+      - Compare context usage
+      - Compare result quality
+      - Identify when to use subagent vs inline
+
+experiments:
+  - id: spawn_git_subagent
+    hypothesis_id: h2
+    description: Test git-operations subagent specialization
+    test_prompts:
+      - "Create a commit with the current changes"
+    expected:
+      - Main agent spawns git-operations subagent
+      - Subagent follows git-operations.md rules
+      - Commit created with proper format
+      - SubagentStop hook verifies commit
+
+  - id: context_isolation
+    hypothesis_id: h1
+    description: Verify subagent doesn't pollute main context
+    test:
+      - Main agent processes 100 lines of text
+      - Spawns subagent to do separate task
+      - Main agent continues
+      - Context usage measured
+    expected:
+      - Subagent work not in main context
+      - Main agent resumes cleanly
+      - Total context < 2x individual contexts
+
+  - id: subagent_result_communication
+    hypothesis_id: h4
+    description: Test how results return from subagent
+    test_prompts:
+      - "Use a subagent to read a file and tell me the line count"
+    observe:
+      - What does main agent receive?
+      - Is it full transcript or summary?
+      - Can main agent use the result?
+
+  - id: compare_inline_vs_subagent
+    hypothesis_id: h5
+    description: Compare inline work vs subagent for git commit
+    test_cases:
+      - inline: Main agent runs git commands directly
+      - subagent: Main agent spawns git-operations subagent
+    compare:
+      - Context usage
+      - Time to complete
+      - Safety (hooks enforcement)
+      - Result quality
+
+  - id: subagent_for_parallel_orchestration
+    hypothesis_id: h1
+    description: Subagent for worker orchestration
+    setup: |
+      Main agent needs to process 100 items in parallel.
+      Instead of managing workers in main context,
+      spawn subagent to orchestrate workers.
+    test:
+      - Main agent describes task
+      - Spawns orchestrator subagent
+      - Subagent manages workers
+      - Results written to file
+      - Main agent reads summary
+    expected:
+      - Worker output doesn't flood main context
+      - Main agent only sees final summary
+      - Processing completes correctly
+
+  - id: subagent_hook_enforcement
+    hypothesis_id: h3
+    description: Test SubagentStop hook enforcement
+    setup: |
+      SubagentStop hook: verify-git-subagent.py
+      Verifies that git subagent actually committed
+    test:
+      - Spawn git-operations subagent
+      - Subagent tries to stop without committing
+      - Hook should block
+    expected:
+      - Hook fires on subagent stop
+      - Hook can read subagent transcript
+      - Hook blocks if expectations not met
+
+success_metrics:
+  - "Clear understanding of subagent context isolation"
+  - "Documented when to use subagent vs inline"
+  - "Hook enforcement patterns validated"
+  - "Best practices for subagent communication"
+
+testing_process:
+  1_test_existing: |
+    Test the existing git-operations and time-tracker agents:
+
+    1. Make a code change
+    2. Ask "Please commit this change"
+    3. Observe:
+       - Does git-operations subagent spawn?
+       - Does it follow the agent rules?
+       - Does SubagentStop hook fire?
+
+  2_context_measurement: |
+    Compare context usage:
+
+    Test A: Inline git operations
+    - Run git status, git add, git commit directly
+
+    Test B: Subagent git operations
+    - Spawn git-operations subagent
+
+    Compare token usage in main context
+
+  3_orchestration_test: |
+    Test subagent for parallel orchestration:
+
+    1. Create list of 50 items to process
+    2. Spawn orchestrator subagent
+    3. Have subagent manage parallel workers
+    4. Verify main context stays clean
+
+notes: |
+  Key insight from original vision:
+  "If we have python workers working in parallel, that should be done
+  by a subagent so we don't pollute the process orchestrators context window"
+
+  This is critical for:
+  - Large-scale parallel processing
+  - Complex multi-step workflows
+  - Specialized tasks (git, time tracking)
+
+  Questions to answer:
+  1. What's passed to subagent? (Just the prompt, or more context?)
+  2. What's returned from subagent? (Full transcript or just final message?)
+  3. Can subagent spawn its own subagents?
+  4. Performance overhead of subagent vs inline?

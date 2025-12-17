@@ -1,0 +1,143 @@
+# ABOUTME: Test plan for experimenting with different topic generation approaches
+# ABOUTME: Part of coloring-prepub project discovery phase
+
+feature:
+  name: topic_generation_approaches
+  description: Test different methods for discovering and generating coloring page topics
+  category: coloring-prepub
+  project: projects/coloring-prepub
+
+context: |
+  We identified 3 main topic sources from competitor analysis:
+  - Seasonal/calendar (holidays, months, seasons)
+  - Evergreen (animals, nature, fantasy, etc.)
+  - Trending/pop culture (movies, games, anime)
+
+  Now we need to test different approaches for generating topics in each category
+  to understand what data we get and what's worth capturing in the schema.
+
+learning_goals:
+  - Understand what data each generation approach produces
+  - Compare quality and actionability of different approaches
+  - Identify which approaches are worth automating
+  - Inform final database schema design
+
+hypotheses:
+  - id: h1
+    statement: "Calendar-based discovery produces actionable seasonal topics"
+    rationale: Seasonal content has clear timing windows - should be most structured
+    evidence_needed:
+      - List of upcoming events/holidays with dates
+      - Topic ideas per event
+      - Useful metadata (timing, audience, etc.)
+
+  - id: h2
+    statement: "LLM brainstorming produces quality evergreen topic ideas"
+    rationale: Evergreen topics don't need external data - pure generation task
+    evidence_needed:
+      - Topic lists by subcategory
+      - Novelty/uniqueness of ideas
+      - Whether output needs human curation
+
+  - id: h3
+    statement: "Trend research requires external data sources"
+    rationale: Can't know what's trending without looking at real data
+    evidence_needed:
+      - What external sources provide useful trend data
+      - How to identify kid-relevant trends
+      - Whether this is automatable or needs human judgment
+
+experiments:
+  - id: calendar_discovery
+    hypothesis_id: h1
+    description: Generate seasonal topics from upcoming calendar events
+    test_steps:
+      - Generate topics for next 3 months (Dec, Jan, Feb)
+      - Include holidays, seasons, school events
+      - Capture suggested timing, audience, and related ideas
+    prompts:
+      - |
+        Generate coloring page topic ideas for the next 3 months (December 2024,
+        January 2025, February 2025). For each month, identify:
+
+        1. Major holidays and events
+        2. Seasonal themes
+        3. School/kid-relevant dates
+
+        For each event, suggest:
+        - 3-5 specific coloring page topic ideas
+        - Target audience (kids, teens, adults, all)
+        - Ideal timing (when to publish relative to event)
+        - Any related subcategories (animals + holiday combo, etc.)
+
+        Format as structured data that could go into a database.
+    expected:
+      - Structured output with dates
+      - Multiple topic ideas per event
+      - Clear timing recommendations
+      - Audience suggestions
+
+  - id: evergreen_brainstorm
+    hypothesis_id: h2
+    description: Generate evergreen topics via LLM brainstorming
+    test_steps:
+      - Pick 3 evergreen subcategories (animals, vehicles, fantasy)
+      - Generate 20 topic ideas per subcategory
+      - Assess novelty and actionability
+    prompts:
+      - |
+        Generate 20 coloring page topic ideas for ANIMALS.
+
+        Requirements:
+        - Mix of common (dogs, cats) and unusual (axolotl, pangolin)
+        - Consider different contexts (jungle, farm, ocean, pets)
+        - Include seasonal variations where relevant (baby animals in spring)
+        - Note difficulty level (simple for kids, detailed for adults)
+
+        Format each as:
+        - Topic name
+        - Brief description (what makes this interesting)
+        - Suggested difficulty
+        - Any seasonal timing
+        - Related topics/combos
+      - |
+        Generate 20 coloring page topic ideas for VEHICLES.
+        [Same format as above]
+      - |
+        Generate 20 coloring page topic ideas for FANTASY/MYTHICAL.
+        [Same format as above]
+    expected:
+      - 20 ideas per category (60 total)
+      - Mix of obvious and creative
+      - Useful metadata per topic
+
+  - id: trend_research
+    hypothesis_id: h3
+    description: Explore what it takes to identify trending topics
+    test_steps:
+      - Identify potential data sources for kid trends
+      - Try to gather current trend information
+      - Assess what's automatable vs requires human judgment
+    research_questions:
+      - What movies/shows are popular with kids right now?
+      - What video games are trending?
+      - What social media trends translate to coloring pages?
+      - How to avoid licensed content issues while riding trends?
+    expected:
+      - List of potential data sources
+      - Assessment of automation feasibility
+      - Recommendation for trend discovery workflow
+
+outputs:
+  location: projects/coloring-prepub/validation/topic_generation/
+  files:
+    - calendar_topics.md: Seasonal topic generation results
+    - evergreen_topics.md: Brainstormed evergreen topics
+    - trend_research.md: Trend discovery feasibility assessment
+    - schema_updates.md: Any schema changes suggested by experiments
+
+success_metrics:
+  - "Generated 50+ actionable topic ideas"
+  - "Understand data structure each approach produces"
+  - "Have recommendation for which approaches to automate"
+  - "Schema recommendations refined based on real output"

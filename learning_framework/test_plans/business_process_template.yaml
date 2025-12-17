@@ -1,0 +1,234 @@
+# ABOUTME: Test plan for validating the business process project template
+# ABOUTME: Based on original vision - template enforcement of best practices
+
+feature:
+  name: business_process_template
+  description: Validate that business process template enforces good patterns automatically
+  category: dev-harness
+
+# From original vision (docs/prompt):
+# "Then, when I testing and running my business process, I can load another
+#  instance of Claude Code that is in my project folder and it has it's own
+#  .claude and mcp.json files that are specific to running that business process."
+original_requirements:
+  - Business processes in separate projects
+  - Own .claude/ configuration
+  - Own mcp.json for process-specific tools
+  - Restrictive permissions (vs permissive dev harness)
+  - Standard directory structure
+
+# From V1_PLAN.md:
+# "Business Process Template (2 hours)
+#  Create a ready-to-use template in templates/business_process/"
+template_requirements:
+  files:
+    - .claude/CLAUDE.md: Process-specific instructions template
+    - .claude/settings.json: Restrictive permissions
+    - functional/scripts/: Python scripts
+    - functional/prompts/: Isolated prompt files
+    - outputs/: Run-specific outputs
+    - .env.example: Environment variables template
+    - README.md: Usage instructions
+
+learning_goals:
+  - Verify template exists and is complete
+  - Test creating new project from template
+  - Validate restrictive permissions work
+  - Confirm directory structure is enforced
+  - Test workflow from template to running process
+
+hypotheses:
+  - id: h1
+    statement: "Template can be copied to create new business process project"
+    evidence_needed:
+      - cp -r templates/business_process projects/new_process works
+      - All files present
+      - Customization points clear
+
+  - id: h2
+    statement: "Template permissions are restrictive (vs dev harness permissive)"
+    evidence_needed:
+      - Can read config and data
+      - Can write to outputs
+      - Cannot modify functional code
+      - Cannot run arbitrary commands
+
+  - id: h3
+    statement: "Process-specific CLAUDE.md guides agent behavior"
+    evidence_needed:
+      - Claude follows process instructions
+      - Different behavior than dev harness
+      - Process-specific rules enforced
+
+  - id: h4
+    statement: "Directory structure supports resumability"
+    evidence_needed:
+      - outputs/run_TIMESTAMP/ created
+      - Progress logs in run directory
+      - Can resume from previous run
+
+  - id: h5
+    statement: "Environment variables work for machine-agnostic paths"
+    evidence_needed:
+      - .env loaded correctly
+      - Paths resolve from env vars
+      - Works on different machines (no hardcoded paths)
+
+experiments:
+  - id: template_creation
+    hypothesis_id: h1
+    description: Create new project from template
+    test_steps:
+      - cp -r templates/business_process projects/test_process
+      - Verify all expected files present
+      - Update CLAUDE.md with test process description
+      - Initialize git repo
+    expected:
+      - All files copied
+      - Structure intact
+      - Customizable
+
+  - id: permission_validation
+    hypothesis_id: h2
+    description: Test that permissions are correctly restrictive
+    test_cases:
+      - action: Read config/settings.json
+        expected: Allowed
+
+      - action: Read functional/prompts/main.txt
+        expected: Allowed
+
+      - action: Write outputs/run_123/result.json
+        expected: Allowed
+
+      - action: Write functional/scripts/new_script.py
+        expected: Blocked or prompts
+
+      - action: Run arbitrary bash command
+        expected: Limited to allowed patterns
+
+  - id: claude_md_guidance
+    hypothesis_id: h3
+    description: Test that CLAUDE.md guides process-specific behavior
+    setup:
+      process_claude_md: |
+        # Test Process Agent
+
+        You are a data processing agent. Your job is to:
+        1. Read input files from data/
+        2. Process them according to config
+        3. Write results to outputs/
+
+        NEVER modify the functional/ directory.
+        ALWAYS log progress to outputs/run_X/progress.log
+    test_prompts:
+      - "Process the input data"
+    expected:
+      - Follows process instructions
+      - Writes to outputs/
+      - Creates progress log
+      - Does not modify functional/
+
+  - id: run_directory_structure
+    hypothesis_id: h4
+    description: Test timestamp-based run directories
+    test_steps:
+      - Start new process run
+      - Verify run_YYYY-MM-DD_HHMMSS created
+      - Verify logs/ results/ errors/ subdirs
+      - Write some output
+      - Start another run
+      - Verify separate directories
+    expected:
+      - Each run has unique directory
+      - Subdirectories present
+      - Content isolated per run
+
+  - id: env_var_paths
+    hypothesis_id: h5
+    description: Test environment variable path resolution
+    setup:
+      .env: |
+        DATA_DIR=./data
+        OUTPUT_DIR=./outputs
+        API_KEY=test_key
+    test:
+      - Script reads DATA_DIR from env
+      - Script writes to OUTPUT_DIR from env
+      - No hardcoded paths in scripts
+    expected:
+      - Paths resolve correctly
+      - Works when project moved
+      - API_KEY available but not logged
+
+success_metrics:
+  - "Template is complete and documented"
+  - "New projects can be created easily"
+  - "Permissions are correctly restrictive"
+  - "Directory structure enforced"
+  - "Environment variables work"
+
+testing_process:
+  1_check_template: |
+    Verify template exists:
+    ls templates/business_process/
+
+    Should contain:
+    - .claude/CLAUDE.md
+    - .claude/settings.json
+    - functional/scripts/
+    - functional/prompts/
+    - outputs/
+    - .env.example
+    - README.md
+
+  2_create_test_project: |
+    cp -r templates/business_process projects/template_test
+    cd projects/template_test
+    git init
+    cp .env.example .env
+    # Edit .env with test values
+    # Edit .claude/CLAUDE.md with test process
+
+  3_test_permissions: |
+    cd projects/template_test
+    claude
+
+    Try various operations:
+    - Read allowed files
+    - Write to outputs/
+    - Try to modify functional/ (should be blocked)
+
+  4_test_full_workflow: |
+    Create simple test process:
+    - Input: data/input.json
+    - Process: Read, transform, output
+    - Output: outputs/run_X/result.json
+
+    Run and verify:
+    - Correct directories created
+    - Progress logged
+    - Result in expected location
+
+notes: |
+  The business process template is critical for the two-tier architecture:
+
+  Dev Harness (parent):
+  - Permissive permissions
+  - Skills for building agents
+  - Full tool access
+
+  Business Process (child):
+  - Restrictive permissions
+  - Process-specific CLAUDE.md
+  - Limited to process operations
+
+  If the template doesn't work well:
+  - Each new process needs manual setup
+  - Patterns may be applied inconsistently
+  - Harder to maintain multiple processes
+
+  Template improvements to consider:
+  - Example scripts with common patterns
+  - Pre-configured hooks for process monitoring
+  - Sample prompts for common tasks
