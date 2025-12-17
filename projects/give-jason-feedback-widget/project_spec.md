@@ -23,11 +23,18 @@ No formal feedback collection - this is greenfield.
 ## UI/UX Requirements
 - Slide-in overlay from the right side of screen
 - Trigger: clickable tab/button always visible on edge
-- Simple form with:
-  - 2-3 dropdown questions
-  - Text field for open feedback
-  - Submit button
-- Identifies which user is logged in
+- Form fields:
+  1. **Feedback type** (dropdown): Bug, Feature request, Other
+  2. **Urgency** (dropdown): High, Medium, Low
+  3. **Description** (text area): Explain the feedback
+  4. **Screenshot**: Auto-captured on open + option to add more
+  5. Submit button
+
+### Auto-Captured Data (no user input needed)
+- Current page URL
+- Timestamp
+- User identity (from app auth)
+- Full page screenshot (auto-captured when widget opens)
 
 ## Technical Requirements
 - Drop-in React component
@@ -42,8 +49,15 @@ No formal feedback collection - this is greenfield.
 
 ## Outputs
 - **Destination**: Airtable (existing base with auth already configured)
-- **Fields**: TBD based on form questions
-- **Record per submission**: timestamp, user, app, responses
+- **Fields per record**:
+  - Timestamp (auto)
+  - User ID/email (auto from app auth)
+  - App name (config)
+  - Page URL (auto)
+  - Feedback type (Bug/Feature request/Other)
+  - Urgency (High/Medium/Low)
+  - Description (text)
+  - Screenshots (attachment field - 1 or more images)
 
 ## Constraints
 - Must use existing Airtable base/auth (env var for API key + base ID)
@@ -56,6 +70,10 @@ No formal feedback collection - this is greenfield.
 |------------|--------|--------|--------|
 
 ## Open Questions
-- What are the specific dropdown questions?
-- How is user identity passed to the widget?
+- How is user identity passed to the widget? (prop? context? callback?)
 - npm package vs copy-paste code?
+- Screenshot storage: upload to Airtable directly, or use separate hosting (S3/Cloudinary)?
+
+## Technical Assumptions to Validate
+- `html2canvas` can capture full page screenshots reliably in target apps
+- Airtable attachment field can accept base64 or URL uploads
