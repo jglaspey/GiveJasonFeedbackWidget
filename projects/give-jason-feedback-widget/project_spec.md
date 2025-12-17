@@ -37,10 +37,11 @@ No formal feedback collection - this is greenfield.
 - Full page screenshot (auto-captured when widget opens)
 
 ## Technical Requirements
-- Drop-in React component
+- Drop-in React component (copy-paste distribution)
 - Configuration via environment variables
 - Clear documentation for easy setup across apps
 - Must work with existing Tailwind/shadcn styling
+- Screenshots compressed to 70% quality JPG before upload
 
 ## Inputs
 - **User identity**: Passed as React prop (`user` object with `email` and/or `id`)
@@ -50,6 +51,7 @@ No formal feedback collection - this is greenfield.
 
 ## Outputs
 - **Destination**: Airtable (existing base with auth already configured)
+- **Screenshot storage**: Airtable attachment field (compressed 70% JPG)
 - **Fields per record**:
   - Timestamp (auto)
   - User ID/email (auto from app auth)
@@ -58,22 +60,39 @@ No formal feedback collection - this is greenfield.
   - Feedback type (Bug/Feature request/Other)
   - Urgency (High/Medium/Low)
   - Description (text)
-  - Screenshots (attachment field - 1 or more images)
+  - Screenshots (attachment field - 1 or more compressed JPGs)
 
 ## Constraints
 - Must use existing Airtable base/auth (env var for API key + base ID)
 
 ## Workflow Steps
-[To be discovered]
+
+### User Flow
+1. User clicks feedback tab on right edge of screen
+2. Widget slides in, auto-captures full page screenshot
+3. User sees screenshot thumbnail, can add more if needed
+4. User selects feedback type (Bug/Feature/Other)
+5. User selects urgency (High/Medium/Low)
+6. User writes description
+7. User clicks Submit
+8. Widget compresses screenshots to 70% JPG
+9. Widget POSTs to Airtable API
+10. Widget shows success message, slides closed
+
+### Integration Flow (for developers)
+1. Copy widget component files into app
+2. Add env vars: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME`
+3. Import component and render with `user` prop
+4. Done
 
 ## Validation Results
 | Assumption | Tested | Result | Impact |
 |------------|--------|--------|--------|
 
 ## Open Questions
-- npm package vs copy-paste code?
-- Screenshot storage: upload to Airtable directly, or use separate hosting (S3/Cloudinary)?
+None - ready for validation and implementation planning.
 
 ## Technical Assumptions to Validate
-- `html2canvas` can capture full page screenshots reliably in target apps
-- Airtable attachment field can accept base64 or URL uploads
+- `html2canvas` captures full page screenshots reliably
+- Canvas can export to 70% quality JPG
+- Airtable API accepts base64 image uploads to attachment fields
