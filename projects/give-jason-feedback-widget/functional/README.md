@@ -40,7 +40,15 @@ styles/
 npm install html2canvas
 ```
 
-### 3. Set up Airtable
+### 3. Import the CSS
+
+In your app's entry point (e.g., `_app.tsx` or `layout.tsx`):
+
+```tsx
+import './path/to/styles/feedback-widget.css';
+```
+
+### 4. Set up Airtable
 
 Create a table in Airtable with these fields:
 
@@ -56,7 +64,7 @@ Create a table in Airtable with these fields:
 | Description | Long text | |
 | Screenshots | Long text | Stores base64 JSON array |
 
-### 4. Configure environment variables
+### 5. Configure environment variables
 
 Add to your `.env`:
 
