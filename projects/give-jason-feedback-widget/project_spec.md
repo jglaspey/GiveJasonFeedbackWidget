@@ -43,9 +43,10 @@ No formal feedback collection - this is greenfield.
 - Must work with existing Tailwind/shadcn styling
 
 ## Inputs
-- User identity (from app's existing auth)
+- **User identity**: Passed as React prop (`user` object with `email` and/or `id`)
+  - Works with NextAuth (`session.user`) and BetterAuth (`useAuth().user`)
 - Form responses (dropdowns + text)
-- App identifier (which app sent the feedback)
+- App identifier (config prop or env var)
 
 ## Outputs
 - **Destination**: Airtable (existing base with auth already configured)
@@ -70,7 +71,6 @@ No formal feedback collection - this is greenfield.
 |------------|--------|--------|--------|
 
 ## Open Questions
-- How is user identity passed to the widget? (prop? context? callback?)
 - npm package vs copy-paste code?
 - Screenshot storage: upload to Airtable directly, or use separate hosting (S3/Cloudinary)?
 
