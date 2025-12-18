@@ -14,41 +14,40 @@ A drop-in React component for collecting user feedback with automatic screenshot
 
 ## Installation
 
-### 1. Copy the files
+### Option A: Install from GitHub (recommended)
 
-Copy the following directories into your project:
-
-```
-components/
-├── FeedbackWidget.tsx
-├── FeedbackForm.tsx
-├── ScreenshotPreview.tsx
-└── index.ts
-
-lib/
-├── types.ts
-├── screenshot.ts
-└── airtable.ts
-
-styles/
-└── feedback-widget.css
+```bash
+npm install github:jglaspey/GiveJasonFeedbackWidget
 ```
 
-### 2. Install dependencies
+Then import the component and styles:
+
+```tsx
+import { FeedbackWidget } from 'give-jason-feedback-widget';
+import 'give-jason-feedback-widget/styles/feedback-widget.css';
+```
+
+To update to the latest version:
+
+```bash
+npm update give-jason-feedback-widget
+```
+
+### Option B: Copy the files
+
+Copy `components/`, `lib/`, and `styles/` directories into your project, then:
 
 ```bash
 npm install html2canvas
 ```
 
-### 3. Import the CSS
-
-In your app's entry point (e.g., `_app.tsx` or `layout.tsx`):
+Import the CSS in your app's entry point:
 
 ```tsx
 import './path/to/styles/feedback-widget.css';
 ```
 
-### 4. Set up Airtable
+## Airtable Setup
 
 Create a table in Airtable with these fields:
 
@@ -64,7 +63,7 @@ Create a table in Airtable with these fields:
 | Description | Long text | |
 | Screenshots | Long text | Stores base64 JSON array |
 
-### 5. Configure environment variables
+## Environment Variables
 
 Add to your `.env`:
 
@@ -79,7 +78,7 @@ AIRTABLE_TABLE_NAME=Feedback
 ### With NextAuth
 
 ```tsx
-import { FeedbackWidget } from './components';
+import { FeedbackWidget } from 'give-jason-feedback-widget';
 import { useSession } from 'next-auth/react';
 
 export default function App() {

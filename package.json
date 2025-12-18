@@ -1,9 +1,32 @@
 {
   "name": "give-jason-feedback-widget",
   "version": "1.0.0",
-  "description": "Drop-in React feedback widget with auto-screenshot capture",
+  "description": "Drop-in React feedback widget with auto-screenshot capture and Airtable integration",
   "main": "components/index.ts",
   "types": "lib/types.ts",
+  "exports": {
+    ".": "./components/index.ts",
+    "./styles": "./styles/feedback-widget.css"
+  },
+  "files": [
+    "components",
+    "lib",
+    "styles",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jglaspey/GiveJasonFeedbackWidget.git"
+  },
+  "keywords": [
+    "react",
+    "feedback",
+    "widget",
+    "screenshot",
+    "airtable"
+  ],
+  "author": "Jason Glaspey",
+  "license": "MIT",
   "dependencies": {
     "html2canvas": "^1.4.1"
   },
