@@ -107,7 +107,7 @@ export default function App() {
 ### With BetterAuth
 
 ```tsx
-import { FeedbackWidget } from './components';
+import { FeedbackWidget } from 'give-jason-feedback-widget';
 import { useAuth } from '@better-auth/react';
 
 export default function App() {
