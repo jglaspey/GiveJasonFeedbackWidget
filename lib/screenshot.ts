@@ -33,6 +33,21 @@ function resizeCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
 }
 
 /**
+ * Converts oklch/modern CSS colors to rgb in a cloned document
+ * html2canvas doesn't support oklch() colors used by Tailwind CSS 4
+ */
+function convertColorsToRgb(clonedDoc: Document): void {
+  const allElements = clonedDoc.querySelectorAll('*');
+  allElements.forEach((el) => {
+    const computed = window.getComputedStyle(el as Element);
+    const htmlEl = el as HTMLElement;
+    htmlEl.style.color = computed.color;
+    htmlEl.style.backgroundColor = computed.backgroundColor;
+    htmlEl.style.borderColor = computed.borderColor;
+  });
+}
+
+/**
  * Captures the current page as a compressed JPG
  * Resizes to max 800px width and 60% quality to fit Airtable limits
  * Returns base64 encoded string (without data URI prefix)
@@ -43,6 +58,7 @@ export async function capturePageScreenshot(): Promise<string> {
     allowTaint: true,
     scrollY: -window.scrollY,
     windowHeight: document.documentElement.scrollHeight,
+    onclone: (clonedDoc) => convertColorsToRgb(clonedDoc),
   });
 
   const resizedCanvas = resizeCanvas(canvas);
@@ -60,6 +76,7 @@ export async function captureElementScreenshot(
   const canvas = await html2canvas(element, {
     useCORS: true,
     allowTaint: true,
+    onclone: (clonedDoc) => convertColorsToRgb(clonedDoc),
   });
 
   const resizedCanvas = resizeCanvas(canvas);
