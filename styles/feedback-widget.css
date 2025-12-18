@@ -139,24 +139,30 @@
 
 .screenshot-preview-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   margin-bottom: 0.75rem;
   font-size: 0.875rem;
   color: var(--feedback-text-muted);
 }
 
-.screenshot-preview-add {
+.screenshot-preview-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.screenshot-preview-btn {
   background: none;
   border: 1px solid var(--feedback-border);
-  padding: 0.25rem 0.75rem;
+  padding: 0.375rem 0.75rem;
   border-radius: 0.25rem;
   cursor: pointer;
   font-size: 0.75rem;
   color: var(--feedback-text);
+  white-space: nowrap;
 }
 
-.screenshot-preview-add:hover {
+.screenshot-preview-btn:hover {
   background-color: var(--feedback-border);
 }
 

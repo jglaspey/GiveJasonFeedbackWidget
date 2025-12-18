@@ -43,13 +43,24 @@ export function FeedbackWidget({
     setErrorMessage('');
   }, []);
 
-  const handleAddScreenshot = useCallback(async () => {
+  const handleCaptureScreenshot = useCallback(async () => {
     try {
       const screenshot = await capturePageScreenshot();
       setScreenshots((prev) => [...prev, screenshot]);
     } catch (error) {
       console.error('Failed to capture screenshot:', error);
     }
+  }, []);
+
+  const handleUploadScreenshot = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      // Strip data URI prefix to get just the base64
+      const base64 = result.replace(/^data:image\/\w+;base64,/, '');
+      setScreenshots((prev) => [...prev, base64]);
+    };
+    reader.readAsDataURL(file);
   }, []);
 
   const handleRemoveScreenshot = useCallback((index: number) => {
@@ -108,7 +119,7 @@ export function FeedbackWidget({
           className="feedback-widget-trigger"
           aria-label="Open feedback form"
         >
-          Feedback
+          Give Jason Feedback
         </button>
       )}
 
@@ -151,7 +162,8 @@ export function FeedbackWidget({
                 <>
                   <ScreenshotPreview
                     screenshots={screenshots}
-                    onAdd={handleAddScreenshot}
+                    onCapture={handleCaptureScreenshot}
+                    onUpload={handleUploadScreenshot}
                     onRemove={handleRemoveScreenshot}
                   />
                   <FeedbackForm
