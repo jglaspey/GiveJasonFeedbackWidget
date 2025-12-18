@@ -33,18 +33,39 @@ function resizeCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
 }
 
 /**
- * Converts oklch/modern CSS colors to rgb in a cloned document
+ * Converts oklch/modern CSS colors to rgb before html2canvas runs
  * html2canvas doesn't support oklch() colors used by Tailwind CSS 4
+ * Returns a restore function to revert the DOM changes
  */
-function convertColorsToRgb(clonedDoc: Document): void {
-  const allElements = clonedDoc.querySelectorAll('*');
-  allElements.forEach((el) => {
-    const computed = window.getComputedStyle(el as Element);
+function convertColorsToRgb(): () => void {
+  const elementsWithStyles: Array<{ el: HTMLElement; original: string }> = [];
+
+  document.querySelectorAll('*').forEach((el) => {
     const htmlEl = el as HTMLElement;
+    const computed = window.getComputedStyle(el);
+
+    // Store original inline style
+    elementsWithStyles.push({
+      el: htmlEl,
+      original: htmlEl.getAttribute('style') || '',
+    });
+
+    // Apply computed rgb values (getComputedStyle returns rgb, not oklch)
     htmlEl.style.color = computed.color;
     htmlEl.style.backgroundColor = computed.backgroundColor;
     htmlEl.style.borderColor = computed.borderColor;
   });
+
+  // Return restore function
+  return () => {
+    elementsWithStyles.forEach(({ el, original }) => {
+      if (original) {
+        el.setAttribute('style', original);
+      } else {
+        el.removeAttribute('style');
+      }
+    });
+  };
 }
 
 /**
@@ -53,17 +74,24 @@ function convertColorsToRgb(clonedDoc: Document): void {
  * Returns base64 encoded string (without data URI prefix)
  */
 export async function capturePageScreenshot(): Promise<string> {
-  const canvas = await html2canvas(document.body, {
-    useCORS: true,
-    allowTaint: true,
-    scrollY: -window.scrollY,
-    windowHeight: document.documentElement.scrollHeight,
-    onclone: (clonedDoc) => convertColorsToRgb(clonedDoc),
-  });
+  // Convert oklch colors to rgb BEFORE html2canvas parses styles
+  const restoreColors = convertColorsToRgb();
 
-  const resizedCanvas = resizeCanvas(canvas);
-  const dataUrl = resizedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-  return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  try {
+    const canvas = await html2canvas(document.body, {
+      useCORS: true,
+      allowTaint: true,
+      scrollY: -window.scrollY,
+      windowHeight: document.documentElement.scrollHeight,
+    });
+
+    const resizedCanvas = resizeCanvas(canvas);
+    const dataUrl = resizedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  } finally {
+    // Restore original styles
+    restoreColors();
+  }
 }
 
 /**
@@ -73,15 +101,22 @@ export async function capturePageScreenshot(): Promise<string> {
 export async function captureElementScreenshot(
   element: HTMLElement
 ): Promise<string> {
-  const canvas = await html2canvas(element, {
-    useCORS: true,
-    allowTaint: true,
-    onclone: (clonedDoc) => convertColorsToRgb(clonedDoc),
-  });
+  // Convert oklch colors to rgb BEFORE html2canvas parses styles
+  const restoreColors = convertColorsToRgb();
 
-  const resizedCanvas = resizeCanvas(canvas);
-  const dataUrl = resizedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-  return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  try {
+    const canvas = await html2canvas(element, {
+      useCORS: true,
+      allowTaint: true,
+    });
+
+    const resizedCanvas = resizeCanvas(canvas);
+    const dataUrl = resizedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  } finally {
+    // Restore original styles
+    restoreColors();
+  }
 }
 
 /**
