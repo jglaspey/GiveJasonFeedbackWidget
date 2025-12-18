@@ -7,7 +7,7 @@ import type {
   FeedbackFormData,
   FeedbackSubmission,
 } from '../lib/types';
-import { capturePageScreenshot } from '../lib/screenshot';
+import { capturePageScreenshot, resizeImageFile } from '../lib/screenshot';
 import { submitFeedback } from '../lib/airtable';
 import { FeedbackForm } from './FeedbackForm';
 import { ScreenshotPreview } from './ScreenshotPreview';
@@ -52,15 +52,13 @@ export function FeedbackWidget({
     }
   }, []);
 
-  const handleUploadScreenshot = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      // Strip data URI prefix to get just the base64
-      const base64 = result.replace(/^data:image\/\w+;base64,/, '');
+  const handleUploadScreenshot = useCallback(async (file: File) => {
+    try {
+      const base64 = await resizeImageFile(file);
       setScreenshots((prev) => [...prev, base64]);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to process uploaded image:', error);
+    }
   }, []);
 
   const handleRemoveScreenshot = useCallback((index: number) => {
