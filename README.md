@@ -61,7 +61,7 @@ Create a table in Airtable with these fields:
 | Feedback Type | Single select | Options: Bug, Feature request, Other |
 | Urgency | Single select | Options: High, Medium, Low |
 | Description | Long text | |
-| Screenshots | Long text | Stores base64 JSON array |
+| Screenshots | Attachment | Uploaded as proper image files |
 
 ## Environment Variables
 
