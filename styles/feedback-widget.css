@@ -14,27 +14,30 @@
   --feedback-overlay: rgba(0, 0, 0, 0.5);
 }
 
-/* Trigger button - fixed on right edge */
+/* Trigger button - fixed on right edge, positioned to avoid scrollbar */
 .feedback-widget-trigger {
   position: fixed;
-  right: 0;
   top: 50%;
-  transform: translateY(-50%) rotate(-90deg) translateX(50%);
-  transform-origin: right center;
+  right: 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
   background-color: var(--feedback-primary);
   color: white;
-  padding: 0.5rem 1rem;
+  padding: 1rem 0.5rem;
   border: none;
-  border-radius: 0.375rem 0.375rem 0 0;
+  border-radius: 0.5rem 0 0 0.5rem;
   cursor: pointer;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   z-index: 9998;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.2s;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-50%);
 }
 
 .feedback-widget-trigger:hover {
   background-color: var(--feedback-primary-hover);
+  transform: translateY(-50%) translateX(-4px);
 }
 
 /* Overlay */
