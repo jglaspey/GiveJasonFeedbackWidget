@@ -28,7 +28,7 @@
   "author": "Jason Glaspey",
   "license": "MIT",
   "dependencies": {
-    "html2canvas": "^1.4.1"
+    "html-to-image": "^1.11.11"
   },
   "peerDependencies": {
     "react": "^18.0.0",
