@@ -38,31 +38,91 @@ function resizeCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
  * Returns a restore function to revert the DOM changes
  */
 function convertColorsToRgb(): () => void {
-  const elementsWithStyles: Array<{ el: HTMLElement; original: string }> = [];
+  const elementsWithStyles: Array<{
+    el: HTMLElement;
+    original: string;
+    computed: {
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      borderTopColor: string;
+      borderRightColor: string;
+      borderBottomColor: string;
+      borderLeftColor: string;
+      outlineColor: string;
+      textDecorationColor: string;
+      boxShadow: string;
+      caretColor: string;
+    };
+  }> = [];
+  const disabledStylesheets: Array<{ sheet: CSSStyleSheet; disabled: boolean }> = [];
 
+  // Step 1: Capture ALL computed styles BEFORE disabling stylesheets
   document.querySelectorAll('*').forEach((el) => {
     const htmlEl = el as HTMLElement;
     const computed = window.getComputedStyle(el);
 
-    // Store original inline style
     elementsWithStyles.push({
       el: htmlEl,
       original: htmlEl.getAttribute('style') || '',
+      computed: {
+        color: computed.color,
+        backgroundColor: computed.backgroundColor,
+        borderColor: computed.borderColor,
+        borderTopColor: computed.borderTopColor,
+        borderRightColor: computed.borderRightColor,
+        borderBottomColor: computed.borderBottomColor,
+        borderLeftColor: computed.borderLeftColor,
+        outlineColor: computed.outlineColor,
+        textDecorationColor: computed.textDecorationColor,
+        boxShadow: computed.boxShadow,
+        caretColor: computed.caretColor,
+      },
     });
+  });
 
-    // Apply computed rgb values (getComputedStyle returns rgb, not oklch)
-    htmlEl.style.color = computed.color;
-    htmlEl.style.backgroundColor = computed.backgroundColor;
-    htmlEl.style.borderColor = computed.borderColor;
+  // Step 2: Disable all stylesheets to prevent html2canvas from parsing oklch
+  Array.from(document.styleSheets).forEach((sheet) => {
+    try {
+      disabledStylesheets.push({ sheet, disabled: sheet.disabled });
+      sheet.disabled = true;
+    } catch {
+      // Cross-origin stylesheets may throw
+    }
+  });
+
+  // Step 3: Apply the captured computed styles inline
+  elementsWithStyles.forEach(({ el, computed }) => {
+    el.style.color = computed.color;
+    el.style.backgroundColor = computed.backgroundColor;
+    el.style.borderColor = computed.borderColor;
+    el.style.borderTopColor = computed.borderTopColor;
+    el.style.borderRightColor = computed.borderRightColor;
+    el.style.borderBottomColor = computed.borderBottomColor;
+    el.style.borderLeftColor = computed.borderLeftColor;
+    el.style.outlineColor = computed.outlineColor;
+    el.style.textDecorationColor = computed.textDecorationColor;
+    el.style.boxShadow = computed.boxShadow;
+    el.style.caretColor = computed.caretColor;
   });
 
   // Return restore function
   return () => {
+    // Restore inline styles
     elementsWithStyles.forEach(({ el, original }) => {
       if (original) {
         el.setAttribute('style', original);
       } else {
         el.removeAttribute('style');
+      }
+    });
+
+    // Re-enable stylesheets
+    disabledStylesheets.forEach(({ sheet, disabled }) => {
+      try {
+        sheet.disabled = disabled;
+      } catch {
+        // Ignore errors
       }
     });
   };
