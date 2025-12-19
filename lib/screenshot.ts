@@ -55,9 +55,9 @@ function convertColorsToRgb(): () => void {
       caretColor: string;
     };
   }> = [];
-  const disabledStylesheets: Array<{ sheet: CSSStyleSheet; disabled: boolean }> = [];
+  const removedStyleElements: Array<{ el: Element; parent: Node; nextSibling: Node | null }> = [];
 
-  // Step 1: Capture ALL computed styles BEFORE disabling stylesheets
+  // Step 1: Capture ALL computed styles BEFORE removing stylesheets
   document.querySelectorAll('*').forEach((el) => {
     const htmlEl = el as HTMLElement;
     const computed = window.getComputedStyle(el);
@@ -81,13 +81,16 @@ function convertColorsToRgb(): () => void {
     });
   });
 
-  // Step 2: Disable all stylesheets to prevent html2canvas from parsing oklch
-  Array.from(document.styleSheets).forEach((sheet) => {
-    try {
-      disabledStylesheets.push({ sheet, disabled: sheet.disabled });
-      sheet.disabled = true;
-    } catch {
-      // Cross-origin stylesheets may throw
+  // Step 2: REMOVE all style and link[rel=stylesheet] elements from DOM
+  // html2canvas reads these directly, disabling CSSStyleSheet isn't enough
+  document.querySelectorAll('style, link[rel="stylesheet"]').forEach((el) => {
+    if (el.parentNode) {
+      removedStyleElements.push({
+        el,
+        parent: el.parentNode,
+        nextSibling: el.nextSibling,
+      });
+      el.parentNode.removeChild(el);
     }
   });
 
@@ -117,12 +120,12 @@ function convertColorsToRgb(): () => void {
       }
     });
 
-    // Re-enable stylesheets
-    disabledStylesheets.forEach(({ sheet, disabled }) => {
+    // Re-insert style elements in original positions
+    removedStyleElements.forEach(({ el, parent, nextSibling }) => {
       try {
-        sheet.disabled = disabled;
+        parent.insertBefore(el, nextSibling);
       } catch {
-        // Ignore errors
+        // Ignore errors if parent no longer exists
       }
     });
   };
